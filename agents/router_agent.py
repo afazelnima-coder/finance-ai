@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 
 from langchain.agents import create_agent
 from langchain.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain.messages import HumanMessage
 from tavily import TavilyClient
 import market_agent, goal_agent, news_agent, tax_agent, qa_agent, portfolio_agent
@@ -44,6 +45,7 @@ def callPortfolio(query: str) -> str:
 agent = create_agent(
     "gpt-5-nano",
     tools=[callQA, callMarket, callNews, callTax, callGoal, callPortfolio],
+    checkpointer=InMemorySaver(),
     system_prompt="""
     You are a helpful assistant specialized in finance questions. 
     Take the query and decide which specialized agent to call among QA, Market, News, Tax, Goal, and Portfolio agents.
