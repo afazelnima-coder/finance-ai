@@ -47,10 +47,12 @@ def predict(message, history):
                 for tool_call in tool_calls:
                     tool_name = tool_call.get("name", "unknown tool")
                     tool_args = tool_call.get("args", {})
+                    tool_query = tool_args.get("query", "N/A")                            
                     new_history.append(
                         gr.ChatMessage(
                             role="assistant",
-                            content=f"🔧 Tool used: {tool_name} with args {tool_args}"
+                            # content=f"🔧 Tool used: {tool_name} with args {tool_args}"
+                            content=f"🔧 Tool used: {tool_name} with query: '{tool_query}'"
                         )
                     )
             if content:
