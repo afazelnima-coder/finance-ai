@@ -9,8 +9,6 @@ load_dotenv()
 # On every call, we get the full chat history and the new message
 def predict(message, history):
     history_langchain_format = []
-
-    # we convert the history into LangChain message format
     for pair in history:
         if len(pair) == 2:
             user, bot = pair
@@ -18,23 +16,51 @@ def predict(message, history):
                 history_langchain_format.append(HumanMessage(content=user))
             if bot:
                 history_langchain_format.append(AIMessage(content=bot))
-
-    # then we add the latest user message
     history_langchain_format.append(HumanMessage(content=message))
-    
-    # call the agent with the formatted history
+
+    # Call the agent
     agent_response = agent.invoke({"messages": history_langchain_format})
-    
-    # Extract the assistant's reply
-    # agent_response should be a dict with "messages" key
+
+    # Prepare new history for Gradio using ChatMessage
+    new_history = []
+    for pair in history:
+        if len(pair) == 2:
+            user, bot = pair
+            if user:
+                new_history.append(gr.ChatMessage(role="user", content=user))
+            if bot:
+                new_history.append(gr.ChatMessage(role="assistant", content=bot))
+
+    # Add the latest user message
+    new_history.append(gr.ChatMessage(role="user", content=message))
+
+    # Show all new messages from agent (including tool calls)
     if isinstance(agent_response, dict) and "messages" in agent_response:
-        last_msg = agent_response["messages"][-1]
-        answer = getattr(last_msg, "content", str(last_msg))
+        prev_len = len(history_langchain_format)
+        new_msgs = agent_response["messages"][prev_len:]
+        for msg in new_msgs:
+            # Check for tool_calls attribute
+            tool_calls = getattr(msg, "tool_calls", None)
+            content = getattr(msg, "content", str(msg))
+            if tool_calls:
+                # Display each tool call
+                for tool_call in tool_calls:
+                    tool_name = tool_call.get("name", "unknown tool")
+                    tool_args = tool_call.get("args", {})
+                    new_history.append(
+                        gr.ChatMessage(
+                            role="assistant",
+                            content=f"🔧 Tool used: {tool_name} with args {tool_args}"
+                        )
+                    )
+            if content:
+                new_history.append(gr.ChatMessage(role="assistant", content=content))
     elif hasattr(agent_response, "content"):
-        answer = agent_response.content
+        new_history.append(gr.ChatMessage(role="assistant", content=agent_response.content))
     else:
-        answer = str(agent_response)
-    return answer
+        new_history.append(gr.ChatMessage(role="assistant", content=str(agent_response)))
+
+    return new_history
 
 demo = gr.ChatInterface(
     predict,
