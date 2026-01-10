@@ -30,6 +30,13 @@ def chat(message, history, thread_id):
     if not message.strip():
         return history, ""
 
+    # Capture print output to detect which agent was called
+    import io
+    from contextlib import redirect_stdout
+
+    f = io.StringIO()
+    called_agent = None
+
     try:
         # Ensure thread_id exists
         if thread_id not in conversation_threads:
@@ -38,11 +45,31 @@ def chat(message, history, thread_id):
         # Configure the agent with the thread
         config = {"configurable": {"thread_id": conversation_threads[thread_id]}}
 
-        # Invoke the router agent
-        response = router_agent.agent.invoke(
-            {"messages": [HumanMessage(content=message)]},
-            config=config
-        )
+        # Invoke the router agent while capturing stdout
+        with redirect_stdout(f):
+            response = router_agent.agent.invoke(
+                {"messages": [HumanMessage(content=message)]},
+                config=config
+            )
+
+        # Check captured output for agent routing
+        output = f.getvalue()
+        if "Router -> QA Agent" in output:
+            called_agent = "QA Agent (RAG)"
+        elif "Router -> Market Agent" in output:
+            called_agent = "Market Agent"
+        elif "Router -> News Agent" in output:
+            called_agent = "News Agent"
+        elif "Router -> Tax Agent" in output:
+            called_agent = "Tax Agent"
+        elif "Router -> Goal Agent" in output:
+            called_agent = "Goal Agent"
+        elif "Router -> Portfolio Agent" in output:
+            called_agent = "Portfolio Agent"
+
+        # Print to console for debugging
+        if called_agent:
+            print(f"🤖 Routed to: {called_agent}")
 
         # Extract the response text - handle both dict and object formats
         last_message = response["messages"][-1]
@@ -52,6 +79,10 @@ def chat(message, history, thread_id):
             bot_message = last_message.get('content', str(last_message))
         else:
             bot_message = str(last_message)
+
+        # Add agent info to the response
+        if called_agent:
+            bot_message = f"*[Routed to: {called_agent}]*\n\n{bot_message}"
 
     except Exception as e:
         import traceback

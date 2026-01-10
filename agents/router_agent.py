@@ -14,36 +14,42 @@ tavily_client = TavilyClient()
 @tool
 def callQA(query: str) -> str:
     """Calls the QA agent to answer finance questions."""
+    print("🤖 Router -> QA Agent")
     response = qa_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
     return response["messages"][-1].content
 
 @tool
 def callMarket(query: str) -> str:
     """Calls the Market agent to answer current market state and trends questions."""
+    print("🤖 Router -> Market Agent")
     response = market_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
     return response["messages"][-1].content
 
 @tool
 def callNews(query: str) -> str:
     """Calls the News agent to get the latest financial news."""
+    print("🤖 Router -> News Agent")
     response = news_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
     return response["messages"][-1].content
 
 @tool
 def callTax(query: str) -> str:
     """Calls the Tax agent to answer tax-related questions."""
+    print("🤖 Router -> Tax Agent")
     response = tax_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
     return response["messages"][-1].content
 
 @tool
 def callGoal(query: str) -> str:
     """Calls the Goal agent to answer questions about financial goals."""
+    print("🤖 Router -> Goal Agent")
     response = goal_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
     return response["messages"][-1].content
 
 @tool
 def callPortfolio(query: str) -> str:
     """Calls the Portfolio agent to answer questions about investment portfolios."""
+    print("🤖 Router -> Portfolio Agent")
     response = portfolio_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
     return response["messages"][-1].content
 
