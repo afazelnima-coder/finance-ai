@@ -11,3 +11,10 @@ wheels/
 
 # Environmental variables
 .env
+
+# RAG vector stores
+investopedia_faiss_index/
+rag/investopedia_faiss_index/
+
+# MAC OS files
+.DS_Store
