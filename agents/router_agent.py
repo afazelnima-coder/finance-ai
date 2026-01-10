@@ -1,11 +1,11 @@
-from dotenv import load_dotenv  
+from dotenv import load_dotenv
 
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.messages import HumanMessage
 from tavily import TavilyClient
-import market_agent, goal_agent, news_agent, tax_agent, qa_agent, portfolio_agent
+from . import market_agent, goal_agent, news_agent, tax_agent, qa_agent, portfolio_agent
 
 load_dotenv()
 
@@ -14,32 +14,38 @@ tavily_client = TavilyClient()
 @tool
 def callQA(query: str) -> str:
     """Calls the QA agent to answer finance questions."""
-    return qa_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    response = qa_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    return response["messages"][-1].content
 
 @tool
 def callMarket(query: str) -> str:
     """Calls the Market agent to answer current market state and trends questions."""
-    return market_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    response = market_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    return response["messages"][-1].content
 
 @tool
 def callNews(query: str) -> str:
     """Calls the News agent to get the latest financial news."""
-    return news_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    response = news_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    return response["messages"][-1].content
 
 @tool
 def callTax(query: str) -> str:
     """Calls the Tax agent to answer tax-related questions."""
-    return tax_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    response = tax_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    return response["messages"][-1].content
 
 @tool
 def callGoal(query: str) -> str:
     """Calls the Goal agent to answer questions about financial goals."""
-    return goal_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    response = goal_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    return response["messages"][-1].content
 
 @tool
 def callPortfolio(query: str) -> str:
     """Calls the Portfolio agent to answer questions about investment portfolios."""
-    return portfolio_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    response = portfolio_agent.agent.invoke({"messages": [HumanMessage(content=query)]})
+    return response["messages"][-1].content
 
 # Create the agent
 agent = create_agent(
