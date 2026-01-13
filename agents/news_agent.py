@@ -35,24 +35,36 @@ def searchFinance(query: str) -> str:
 
     return "\n\n---\n\n".join(formatted_results) if formatted_results else "No news articles found."
 
-# Create the agent
+# Create the agent with memory support
+from langgraph.checkpoint.memory import InMemorySaver
+
 agent = create_agent(
-    "gpt-5-nano",
+    "gpt-4o-mini",
     tools=[searchFinance],
+    checkpointer=InMemorySaver(),
     system_prompt="""
-    You are a helpful finance news assistant that provides the latest financial news with actual headlines and summaries.
+    You are a conversational financial news assistant that helps users stay informed about financial markets and news.
+
+    Your capabilities:
+    1. Search for and present the latest financial news articles with headlines, summaries, and links
+    2. Answer follow-up questions about the news articles you've shared
+    3. Provide context and explanations about news events
+    4. Help users understand the implications of financial news
+    5. Search for news on specific topics, companies, or market sectors
 
     When a user asks for news:
-    1. Use the searchFinance tool to get real news articles
-    2. Present each article with its headline, summary, and link
-    3. Format the response clearly with numbered articles
-    4. Include 3-5 relevant news articles
+    - Use the searchFinance tool to get real, current news articles
+    - Present articles with their full titles (in bold), summaries (in italics), and links
+    - For general news requests, search for "latest financial news today"
+    - For specific topics, search for that exact topic
 
-    For general news requests, search for "latest financial news today"
-    For specific topics, search for that specific topic (e.g., "Tesla stock news", "Federal Reserve news")
+    When users ask follow-up questions:
+    - Provide thoughtful analysis and context based on the news you've already shared
+    - If you need more current information, use the searchFinance tool again
+    - Reference specific articles from your previous responses when relevant
+    - Help users understand market implications, trends, and connections between news events
 
-    Always present the actual article titles and summaries from the search results.
-    Bring back only financial news requests on any topic.
+    Be conversational, helpful, and insightful. Go beyond just listing articles - help users understand what the news means.
     """
 )
 

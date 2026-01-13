@@ -138,83 +138,94 @@ with tab1:
 
 # Tab 2: News
 with tab2:
-    st.header("📰 Latest Financial News")
+    st.header("📰 Financial News Assistant")
 
-    # Initialize search results state
-    if "search_results" not in st.session_state:
-        st.session_state.search_results = None
-    if "search_query" not in st.session_state:
-        st.session_state.search_query = None
+    # Initialize news chat history and thread
+    if "news_chat_history" not in st.session_state:
+        st.session_state.news_chat_history = []
+    if "news_thread_id" not in st.session_state:
+        st.session_state.news_thread_id = str(uuid.uuid4())
 
-    # Search section
-    st.markdown("### Search for Specific News")
+    # Quick actions
+    st.markdown("### Quick Actions")
+    col1, col2, col3 = st.columns(3)
 
-    # Create a form to handle Enter key
-    with st.form(key="news_search_form", clear_on_submit=False):
-        col1, col2 = st.columns([4, 1])
+    with col1:
+        if st.button("📰 Latest Headlines", use_container_width=True, key="latest_headlines"):
+            prompt = "What are the latest financial news headlines?"
+            st.session_state.news_chat_history.append({"role": "user", "content": prompt})
 
-        with col1:
-            news_search = st.text_input(
-                "Search topic:",
-                placeholder="e.g., Tesla stock, Federal Reserve, cryptocurrency...",
-                label_visibility="collapsed",
-                key="news_search_input"
-            )
-
-        with col2:
-            search_button = st.form_submit_button("🔍 Search", use_container_width=True)
-
-    # Handle search
-    if search_button and news_search:
-        with st.spinner(f"Searching news about '{news_search}'..."):
-            try:
-                response = news_agent.agent.invoke(
-                    {"messages": [HumanMessage(content=f"What are the latest news about {news_search}?")]}
-                )
-                st.session_state.search_results = response["messages"][-1].content
-                st.session_state.search_query = news_search
-
-            except Exception as e:
-                st.session_state.search_results = f"Error searching news: {str(e)}"
-                st.session_state.search_query = news_search
-
-    # Display search results if available
-    if st.session_state.search_results:
-        st.success(f"Search Results for: {st.session_state.search_query}")
-        st.markdown(st.session_state.search_results)
-
-        # Add a button to clear search and go back to general news
-        if st.button("← Back to General News", key="back_to_general"):
-            st.session_state.search_results = None
-            st.session_state.search_query = None
-            st.rerun()
-    else:
-        # Only show general news when not displaying search results
-        st.markdown("---")
-
-        # General news section
-        st.markdown("### General Financial News")
-
-        col3, col4 = st.columns([3, 1])
-
-        with col4:
-            if st.button("🔄 Refresh", use_container_width=True, key="news_refresh_button"):
-                st.session_state.news_content = None
-                st.rerun()
-
-        # Fetch general news if not already fetched
-        if st.session_state.news_content is None:
-            with st.spinner("Fetching latest financial news..."):
+            with st.spinner("Fetching latest headlines..."):
                 try:
+                    config = {"configurable": {"thread_id": st.session_state.news_thread_id}}
                     response = news_agent.agent.invoke(
-                        {"messages": [HumanMessage(content="What are the latest financial news headlines?")]}
+                        {"messages": [HumanMessage(content=prompt)]},
+                        config=config
                     )
-                    st.session_state.news_content = response["messages"][-1].content
+                    bot_message = response["messages"][-1].content
+                    st.session_state.news_chat_history.append({"role": "assistant", "content": bot_message})
                 except Exception as e:
-                    st.session_state.news_content = f"Error fetching news: {str(e)}"
+                    error_msg = f"Error: {str(e)}"
+                    st.session_state.news_chat_history.append({"role": "assistant", "content": error_msg})
+            st.rerun()
 
-        # Display general news
-        st.markdown(st.session_state.news_content)
+    with col2:
+        if st.button("📈 Market News", use_container_width=True, key="market_news"):
+            prompt = "What are the latest stock market news?"
+            st.session_state.news_chat_history.append({"role": "user", "content": prompt})
+
+            with st.spinner("Fetching market news..."):
+                try:
+                    config = {"configurable": {"thread_id": st.session_state.news_thread_id}}
+                    response = news_agent.agent.invoke(
+                        {"messages": [HumanMessage(content=prompt)]},
+                        config=config
+                    )
+                    bot_message = response["messages"][-1].content
+                    st.session_state.news_chat_history.append({"role": "assistant", "content": bot_message})
+                except Exception as e:
+                    error_msg = f"Error: {str(e)}"
+                    st.session_state.news_chat_history.append({"role": "assistant", "content": error_msg})
+            st.rerun()
+
+    with col3:
+        if st.button("🔄 Clear Chat", use_container_width=True, key="clear_news"):
+            st.session_state.news_chat_history = []
+            st.session_state.news_thread_id = str(uuid.uuid4())
+            st.rerun()
+
+    st.markdown("---")
+
+    # Display chat history
+    for message in st.session_state.news_chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat input
+    if prompt := st.chat_input("Ask about financial news or search for specific topics...", key="news_chat_input"):
+        # Add user message
+        st.session_state.news_chat_history.append({"role": "user", "content": prompt})
+
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Get bot response
+        with st.chat_message("assistant"):
+            with st.spinner("Searching news..."):
+                try:
+                    config = {"configurable": {"thread_id": st.session_state.news_thread_id}}
+                    response = news_agent.agent.invoke(
+                        {"messages": [HumanMessage(content=prompt)]},
+                        config=config
+                    )
+                    bot_message = response["messages"][-1].content
+                    st.markdown(bot_message)
+                    st.session_state.news_chat_history.append({"role": "assistant", "content": bot_message})
+                except Exception as e:
+                    error_message = f"Sorry, I encountered an error: {str(e)}"
+                    st.error(error_message)
+                    st.session_state.news_chat_history.append({"role": "assistant", "content": error_message})
 
 # Tab 3: Market
 with tab3:
