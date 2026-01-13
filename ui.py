@@ -8,7 +8,7 @@ import uuid
 # Add the parent directory to sys.path so Python can find the agents package
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from agents import router_agent
+from agents import router_agent_v2 as router_agent
 
 load_dotenv()
 
