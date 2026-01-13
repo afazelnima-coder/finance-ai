@@ -140,25 +140,81 @@ with tab1:
 with tab2:
     st.header("📰 Latest Financial News")
 
-    col1, col2 = st.columns([3, 1])
+    # Initialize search results state
+    if "search_results" not in st.session_state:
+        st.session_state.search_results = None
+    if "search_query" not in st.session_state:
+        st.session_state.search_query = None
 
-    with col2:
-        if st.button("🔄 Refresh News", use_container_width=True):
-            st.session_state.news_content = None
+    # Search section
+    st.markdown("### Search for Specific News")
 
-    # Fetch news if not already fetched
-    if st.session_state.news_content is None:
-        with st.spinner("Fetching latest financial news..."):
+    # Create a form to handle Enter key
+    with st.form(key="news_search_form", clear_on_submit=False):
+        col1, col2 = st.columns([4, 1])
+
+        with col1:
+            news_search = st.text_input(
+                "Search topic:",
+                placeholder="e.g., Tesla stock, Federal Reserve, cryptocurrency...",
+                label_visibility="collapsed",
+                key="news_search_input"
+            )
+
+        with col2:
+            search_button = st.form_submit_button("🔍 Search", use_container_width=True)
+
+    # Handle search
+    if search_button and news_search:
+        with st.spinner(f"Searching news about '{news_search}'..."):
             try:
                 response = news_agent.agent.invoke(
-                    {"messages": [HumanMessage(content="What are the latest financial news?")]}
+                    {"messages": [HumanMessage(content=f"What are the latest news about {news_search}?")]}
                 )
-                st.session_state.news_content = response["messages"][-1].content
-            except Exception as e:
-                st.session_state.news_content = f"Error fetching news: {str(e)}"
+                st.session_state.search_results = response["messages"][-1].content
+                st.session_state.search_query = news_search
 
-    # Display news
-    st.markdown(st.session_state.news_content)
+            except Exception as e:
+                st.session_state.search_results = f"Error searching news: {str(e)}"
+                st.session_state.search_query = news_search
+
+    # Display search results if available
+    if st.session_state.search_results:
+        st.success(f"Search Results for: {st.session_state.search_query}")
+        st.markdown(st.session_state.search_results)
+
+        # Add a button to clear search and go back to general news
+        if st.button("← Back to General News", key="back_to_general"):
+            st.session_state.search_results = None
+            st.session_state.search_query = None
+            st.rerun()
+    else:
+        # Only show general news when not displaying search results
+        st.markdown("---")
+
+        # General news section
+        st.markdown("### General Financial News")
+
+        col3, col4 = st.columns([3, 1])
+
+        with col4:
+            if st.button("🔄 Refresh", use_container_width=True, key="news_refresh_button"):
+                st.session_state.news_content = None
+                st.rerun()
+
+        # Fetch general news if not already fetched
+        if st.session_state.news_content is None:
+            with st.spinner("Fetching latest financial news..."):
+                try:
+                    response = news_agent.agent.invoke(
+                        {"messages": [HumanMessage(content="What are the latest financial news headlines?")]}
+                    )
+                    st.session_state.news_content = response["messages"][-1].content
+                except Exception as e:
+                    st.session_state.news_content = f"Error fetching news: {str(e)}"
+
+        # Display general news
+        st.markdown(st.session_state.news_content)
 
 # Tab 3: Market
 with tab3:
