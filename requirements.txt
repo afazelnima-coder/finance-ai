@@ -5,6 +5,7 @@ langchain-text-splitters
 dotenv>=0.9.9
 tavily>=1.1.0
 gradio>=0.5.4
+streamlit>=1.28.0
 faiss-cpu<1.12.0
 datasets
 transformers
