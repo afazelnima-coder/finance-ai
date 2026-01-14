@@ -114,6 +114,11 @@ with tab1:
                             ):
                                 # Look for chat model stream events (token chunks)
                                 if event["event"] == "on_chat_model_stream":
+                                    # Skip router node responses - only stream from sub-agent nodes
+                                    langgraph_node = event.get("metadata", {}).get("langgraph_node", "")
+                                    if langgraph_node == "router":
+                                        continue
+
                                     chunk = event["data"]["chunk"]
                                     if hasattr(chunk, "content") and chunk.content:
                                         state["full_response"] += chunk.content
