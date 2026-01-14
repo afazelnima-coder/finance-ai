@@ -59,27 +59,20 @@ tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📰 News", "📊 Market", "ℹ�
 with tab1:
     st.header("Chat with Finance Assistant")
 
-    # Display chat history
-    for message in st.session_state.chat_history:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Display chat history in a scrollable container
+    chat_container = st.container(height=450)
+    with chat_container:
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-    # Chat input
+    # Chat input (stays at bottom, outside the scrollable container)
     if prompt := st.chat_input("Ask a finance question..."):
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
         # Add user message to chat history
         st.session_state.chat_history.append({"role": "user", "content": prompt})
 
-        # Get bot response with streaming
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
-            called_agent = None
-            has_ai_response = False
-
+        # Get bot response
+        with st.spinner("Thinking..."):
             try:
                 # Ensure thread_id exists
                 if st.session_state.thread_id not in st.session_state.conversation_threads:
@@ -95,7 +88,7 @@ with tab1:
 
                 f = io.StringIO()
 
-                # Build message history for context (including current message)
+                # Build message history for context
                 messages = []
                 for msg in st.session_state.chat_history:
                     if msg["role"] == "user":
@@ -103,30 +96,17 @@ with tab1:
                     else:
                         messages.append(AIMessage(content=msg["content"]))
 
-                # Stream the response with spinner
-                with st.spinner(""):
-                    with redirect_stdout(f):
-                        for event in router_agent.agent.stream(
-                            {"messages": messages},
-                            config=config,
-                            stream_mode="values"
-                        ):
-                            # Get the last message from the event
-                            if "messages" in event and event["messages"]:
-                                last_msg = event["messages"][-1]
-                                # Only show AI messages (not tool calls or echoed questions)
-                                if hasattr(last_msg, 'content') and last_msg.content:
-                                    # Filter out tool calls and only show actual AI responses
-                                    if not hasattr(last_msg, 'tool_calls') or not last_msg.tool_calls:
-                                        # Don't show if it's just echoing the user's question
-                                        if last_msg.content != prompt and len(last_msg.content.strip()) > 0:
-                                            full_response = last_msg.content
-                                            has_ai_response = True
-                                            # Show streaming with cursor
-                                            message_placeholder.markdown(full_response + "▌")
+                # Get response
+                with redirect_stdout(f):
+                    response = router_agent.agent.invoke(
+                        {"messages": messages},
+                        config=config
+                    )
+                    full_response = response["messages"][-1].content
 
                 # Check captured output for agent routing
                 output = f.getvalue()
+                called_agent = None
                 if "Executing QA Agent" in output:
                     called_agent = "QA Agent (RAG)"
                 elif "Executing Market Agent" in output:
@@ -140,27 +120,19 @@ with tab1:
                 elif "Executing Portfolio Agent" in output:
                     called_agent = "Portfolio Agent"
 
-                # Add agent info and display final response
-                if has_ai_response and full_response:
-                    if called_agent:
-                        full_message = f"*[Routed to: {called_agent}]*\n\n{full_response}"
-                    else:
-                        full_message = full_response
-
-                    # Display final response without cursor
-                    message_placeholder.markdown(full_message)
-
-                    # Add to chat history
-                    st.session_state.chat_history.append({"role": "assistant", "content": full_message})
+                # Add agent info to response
+                if called_agent:
+                    full_message = f"*[Routed to: {called_agent}]*\n\n{full_response}"
                 else:
-                    error_message = "Sorry, I couldn't generate a response."
-                    message_placeholder.error(error_message)
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_message})
+                    full_message = full_response
+
+                st.session_state.chat_history.append({"role": "assistant", "content": full_message})
 
             except Exception as e:
                 error_message = f"Sorry, I encountered an error: {str(e)}"
-                message_placeholder.error(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
+
+        st.rerun()
 
 # Tab 2: News
 with tab2:
