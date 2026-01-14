@@ -16,8 +16,8 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
     next_agent: str
 
-# Initialize the LLM for routing
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# Initialize the LLM for routing (with streaming)
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, streaming=True)
 
 def router_node(state: State):
     """Router node that decides which agent to call."""

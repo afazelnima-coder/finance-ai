@@ -4,7 +4,7 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain.messages import HumanMessage
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 
 load_dotenv()
 
@@ -53,9 +53,11 @@ def searchFinance(query: str) -> str:
     except Exception as e:
         return f"Error searching knowledge base: {str(e)}"
 
-# Create the agent
+# Create the agent with streaming enabled
+llm = ChatOpenAI(model="gpt-4o-mini", streaming=True)
+
 agent = create_agent(
-    "gpt-4o-mini",
+    llm,
     tools=[searchFinance],
     system_prompt="""You are a helpful financial advisor assistant specialized in finance questions.
 

@@ -1,8 +1,9 @@
-from dotenv import load_dotenv  
+from dotenv import load_dotenv
 
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from tavily import TavilyClient
 import requests
 import os
@@ -74,11 +75,14 @@ def searchFinance(query: str) -> str:
 
     return "\n\n---\n\n".join(formatted_results) if formatted_results else "No news articles found."
 
-# Create the agent with memory support
+# Create the agent with memory support and streaming
 from langgraph.checkpoint.memory import InMemorySaver
 
+# Use LLM with streaming enabled
+llm = ChatOpenAI(model="gpt-4o-mini", streaming=True)
+
 agent = create_agent(
-    "gpt-4o-mini",
+    llm,
     tools=[searchFinance],
     checkpointer=InMemorySaver(),
     system_prompt="""

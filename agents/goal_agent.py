@@ -1,8 +1,9 @@
-from dotenv import load_dotenv  
+from dotenv import load_dotenv
 
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from tavily import TavilyClient
 
 load_dotenv()
@@ -20,9 +21,11 @@ def searchFinance(query: str) -> str:
         language="en"
     )
 
-# Create the agent
+# Create the agent with streaming enabled
+llm = ChatOpenAI(model="gpt-5-nano", streaming=True)
+
 agent = create_agent(
-    "gpt-5-nano",
+    llm,
     tools=[searchFinance],
     system_prompt=""""
     You are a helpful finance assistant specialized in assisting with setting and planning goals. 
