@@ -17,31 +17,46 @@ tavily_client = TavilyClient()
 def searchFinance(query: str) -> str:
     """Searches for financial news articles on the web and returns headlines with summaries."""
 
-    ## call alpha vantage to get news articles about the query
-
     ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
-    url = f'https://www.alphavantage.co/query?function=NEWS_SENTIMENT&topics={query}&apikey={ALPHA_VANTAGE_API_KEY}'
-    r = requests.get(url)
-    data = r.json()
+    results = []
 
-    print(url)
-    # print(data)
+    # Alpha Vantage topics parameter only accepts predefined topics
+    VALID_TOPICS = [
+        "blockchain", "earnings", "ipo", "mergers_and_acquisitions",
+        "financial_markets", "economy_fiscal", "economy_monetary",
+        "economy_macro", "energy_transportation", "finance",
+        "life_sciences", "manufacturing", "real_estate",
+        "retail_wholesale", "technology"
+    ]
 
-    # format the results from the json response
-    # the main news articles are in the "feed" key
-    results = data.get("feed", [])[:5]  # Limit to top 5 results
+    # Check if query matches a valid Alpha Vantage topic
+    query_lower = query.lower().replace(" ", "_")
+    matching_topic = next((t for t in VALID_TOPICS if t in query_lower or query_lower in t), None)
 
-    # Fall back to Tavily if no results from Alpha Vantage
+    if matching_topic:
+        # Use Alpha Vantage with valid topic
+        url = f'https://www.alphavantage.co/query?function=NEWS_SENTIMENT&topics={matching_topic}&apikey={ALPHA_VANTAGE_API_KEY}'
+        try:
+            r = requests.get(url)
+            data = r.json()
+            results = data.get("feed", [])[:5]
+        except Exception as e:
+            print(f"Alpha Vantage error: {e}")
+
+    # Fall back to Tavily for arbitrary topics or if Alpha Vantage returned no results
     if not results:
-        tavily_results = tavily_client.search(
-            query=query,
-            include_domains=["marketwatch.com", "finance.yahoo.com", "nasdaq.com", "cnbc.com", "reuters.com"],
-            max_results=5,
-            search_depth="advanced",
-            include_answer=True,
-            include_raw_content=False
-        )
-        results = tavily_results.get("results", [])
+        try:
+            tavily_results = tavily_client.search(
+                query=f"{query} financial news",
+                include_domains=["marketwatch.com", "finance.yahoo.com", "nasdaq.com", "cnbc.com", "reuters.com", "bloomberg.com", "wsj.com"],
+                max_results=5,
+                search_depth="advanced",
+                include_answer=True,
+                include_raw_content=False
+            )
+            results = tavily_results.get("results", [])
+        except Exception as e:
+            print(f"Tavily error: {e}")
 
     # Format the results with bold title, italic summary, and link
     formatted_results = []

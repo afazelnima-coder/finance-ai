@@ -242,31 +242,25 @@ with tab2:
 
     st.markdown("---")
 
-    # Display chat history
-    for message in st.session_state.news_chat_history:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Display chat history in a scrollable container
+    chat_container = st.container(height=400)
+    with chat_container:
+        for message in st.session_state.news_chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-    # Chat input
+    # Chat input (stays at bottom, outside the scrollable container)
     if prompt := st.chat_input("Ask about financial news or search for specific topics...", key="news_chat_input"):
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Add user message
+        # Add user message to history
         st.session_state.news_chat_history.append({"role": "user", "content": prompt})
 
-        # Get bot response with streaming
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
-            has_ai_response = False
-
+        # Get bot response
+        with st.spinner("🔍 Searching for news..."):
             try:
                 from langchain.messages import AIMessage
                 config = {"configurable": {"thread_id": st.session_state.news_thread_id}}
 
-                # Build message history for context (including current message)
+                # Build message history for context
                 messages = []
                 for msg in st.session_state.news_chat_history:
                     if msg["role"] == "user":
@@ -274,39 +268,18 @@ with tab2:
                     else:
                         messages.append(AIMessage(content=msg["content"]))
 
-                # Show thinking indicator initially
-                message_placeholder.markdown("*[News Agent]* 🔍 Searching for news...")
-
-                # Stream the response
-                for event in news_agent.agent.stream(
+                response = news_agent.agent.invoke(
                     {"messages": messages},
-                    config=config,
-                    stream_mode="values"
-                ):
-                    # Get the last message from the event
-                    if "messages" in event and event["messages"]:
-                        last_msg = event["messages"][-1]
-                        # Check if it's an AI message with content
-                        if hasattr(last_msg, 'content') and last_msg.content:
-                            # Filter out tool calls and only show AI responses
-                            if not hasattr(last_msg, 'tool_calls') or not last_msg.tool_calls:
-                                full_response = last_msg.content
-                                has_ai_response = True
-                                message_placeholder.markdown(f"*[News Agent]*\n\n{full_response}▌")
-
-                # Display final response without cursor
-                if has_ai_response and full_response:
-                    message_placeholder.markdown(f"*[News Agent]*\n\n{full_response}")
-                    st.session_state.news_chat_history.append({"role": "assistant", "content": f"*[News Agent]*\n\n{full_response}"})
-                else:
-                    error_message = "Sorry, I couldn't generate a response."
-                    message_placeholder.error(error_message)
-                    st.session_state.news_chat_history.append({"role": "assistant", "content": error_message})
+                    config=config
+                )
+                bot_message = response["messages"][-1].content
+                st.session_state.news_chat_history.append({"role": "assistant", "content": bot_message})
 
             except Exception as e:
                 error_message = f"Sorry, I encountered an error: {str(e)}"
-                message_placeholder.error(error_message)
                 st.session_state.news_chat_history.append({"role": "assistant", "content": error_message})
+
+        st.rerun()
 
 # Tab 3: Market
 with tab3:
