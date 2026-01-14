@@ -4,34 +4,58 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain.messages import HumanMessage
 from tavily import TavilyClient
+import requests
+import os
 
 load_dotenv()
+# get the api key from environment variable from dotenv
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 
 tavily_client = TavilyClient()
 
 @tool
 def searchFinance(query: str) -> str:
     """Searches for financial news articles on the web and returns headlines with summaries."""
-    results = tavily_client.search(
-        query=query,
-        include_domains=["marketwatch.com", "finance.yahoo.com", "nasdaq.com", "cnbc.com", "reuters.com"],
-        max_results=5,
-        search_depth="advanced",
-        include_answer=True,
-        include_raw_content=False
-    )
+
+    ## call alpha vantage to get news articles about the query
+
+    ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
+    url = f'https://www.alphavantage.co/query?function=NEWS_SENTIMENT&topics={query}&apikey={ALPHA_VANTAGE_API_KEY}'
+    r = requests.get(url)
+    data = r.json()
+
+    print(url)
+    # print(data)
+
+    # format the results from the json response
+    # the main news articles are in the "feed" key
+    results = data.get("feed", [])[:5]  # Limit to top 5 results
+
+    # Fall back to Tavily if no results from Alpha Vantage
+    if not results:
+        tavily_results = tavily_client.search(
+            query=query,
+            include_domains=["marketwatch.com", "finance.yahoo.com", "nasdaq.com", "cnbc.com", "reuters.com"],
+            max_results=5,
+            search_depth="advanced",
+            include_answer=True,
+            include_raw_content=False
+        )
+        results = tavily_results.get("results", [])
 
     # Format the results with bold title, italic summary, and link
     formatted_results = []
-    if "results" in results:
-        for idx, result in enumerate(results["results"], 1):
-            title = result.get("title", "No title")
-            content = result.get("content", "No content available")
-            url = result.get("url", "")
 
-            # Format: Bold title, italic summary, link at bottom
-            article = f"**{title}**\n\n*{content}*\n\n{url}"
-            formatted_results.append(article)
+    for result in results:
+        title = result.get("title", "No title")
+        # Handle both Alpha Vantage ("summary") and Tavily ("content") formats
+        summary = result.get("summary") or result.get("content", "No content available")
+        url = result.get("url", "")
+
+        # Format: Bold title, italic summary, link at bottom
+        article = f"**{title}**\n\n*{summary}*\n\n{url}"
+        print(article, "\n")
+        formatted_results.append(article)
 
     return "\n\n---\n\n".join(formatted_results) if formatted_results else "No news articles found."
 
@@ -57,6 +81,7 @@ agent = create_agent(
     - Present articles with their full titles (in bold), summaries (in italics), and links
     - For general news requests, search for "latest financial news today"
     - For specific topics, search for that exact topic
+    - For any topic, focus your answer only on financial news
 
     When users ask follow-up questions:
     - Provide thoughtful analysis and context based on the news you've already shared
