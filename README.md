@@ -134,7 +134,32 @@ cap-proj/
    LANGSMITH_PROJECT='finance-assistant'
    ```
 
-4. **Run the application**
+4. **Create the Vector Database (first time only)**
+
+   The QA Agent uses a FAISS vector database with Investopedia articles. You need to create this database before running the app for the first time:
+
+   ```bash
+   uv run python rag/vector_db_loader.py
+   ```
+
+   This will:
+   - Download 500 articles from the Investopedia dataset (HuggingFace)
+   - Create embeddings using OpenAI's text-embedding model
+   - Save the FAISS index to `investopedia_faiss_index/` directory
+
+   **Expected output:**
+   ```
+   Loaded 500 documents from Investopedia dataset
+   Split into XXX chunks
+   Creating embeddings with OpenAI...
+   Creating vector store...
+   ✓ Vector store created
+   ✓ Vector store saved to 'investopedia_faiss_index'
+   ```
+
+   > **Note:** This step requires the `OPENAI_API_KEY` to be set. The embedding cost is minimal (~$0.01 for 500 documents).
+
+5. **Run the application**
    ```bash
    uv run streamlit run streamlit_app.py
    ```
