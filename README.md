@@ -73,7 +73,6 @@ cap-proj/
 ├── agents/
 │   ├── __init__.py
 │   ├── router_agent_v2.py    # Main router with guardrails (LangGraph)
-│   ├── router_agent.py       # Legacy router (LangChain tools)
 │   ├── qa_agent.py           # RAG-based Q&A agent
 │   ├── market_agent.py       # Market data agent
 │   ├── news_agent.py         # Financial news agent
@@ -83,7 +82,6 @@ cap-proj/
 ├── rag/
 │   └── vector_db_loader.py   # FAISS vector store loader
 ├── streamlit_app.py          # Main Streamlit application
-├── ui.py                     # Alternative UI
 ├── main.py                   # CLI entry point
 ├── requirements.txt          # Python dependencies
 ├── .env                      # Environment variables (not in repo)
@@ -336,11 +334,3 @@ Get a free API key at [alphavantage.co](https://www.alphavantage.co/support/#api
 
 ### LangSmith
 Sign up at [smith.langchain.com](https://smith.langchain.com) for observability
-
-## License
-
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
