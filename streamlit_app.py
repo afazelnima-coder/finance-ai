@@ -101,7 +101,7 @@ with tab1:
                     messages.append(HumanMessage(content=prompt))
 
                     # Use a dict to share state with async function
-                    state = {"full_response": "", "called_agent": None}
+                    state = {"full_response": "", "final_response": None}
                     f = io.StringIO()
 
                     # Async streaming function
@@ -114,9 +114,9 @@ with tab1:
                             ):
                                 # Look for chat model stream events (token chunks)
                                 if event["event"] == "on_chat_model_stream":
-                                    # Skip router node responses - only stream from sub-agent nodes
+                                    # Skip router and guardrail node responses - only stream from sub-agent nodes
                                     langgraph_node = event.get("metadata", {}).get("langgraph_node", "")
-                                    if langgraph_node == "router":
+                                    if langgraph_node in ["router", "guardrail"]:
                                         continue
 
                                     chunk = event["data"]["chunk"]
@@ -124,12 +124,19 @@ with tab1:
                                         state["full_response"] += chunk.content
                                         message_placeholder.markdown(state["full_response"] + "▌")
 
+                                # Capture final state for off-topic responses
+                                if event["event"] == "on_chain_end" and event.get("name") == "LangGraph":
+                                    state["final_response"] = event.get("data", {}).get("output", {})
+
                     # Run async streaming
                     asyncio.run(stream_response())
                     full_response = state["full_response"]
 
-                    # Check which agent was called
+                    # Check which agent was called or if off-topic
                     output = f.getvalue()
+                    called_agent = None
+                    is_off_topic = "Handling off-topic question" in output
+
                     if "Executing QA Agent" in output:
                         called_agent = "QA Agent (RAG)"
                     elif "Executing Market Agent" in output:
@@ -143,8 +150,16 @@ with tab1:
                     elif "Executing Portfolio Agent" in output:
                         called_agent = "Portfolio Agent"
 
+                    # Handle off-topic responses (not streamed, get from final state)
+                    if is_off_topic and not full_response and state["final_response"]:
+                        final_messages = state["final_response"].get("messages", [])
+                        if final_messages:
+                            full_response = final_messages[-1].content
+
                     if full_response:
-                        if called_agent:
+                        if is_off_topic:
+                            full_message = f"*[Off-topic query detected]*\n\n{full_response}"
+                        elif called_agent:
                             full_message = f"*[Routed to: {called_agent}]*\n\n{full_response}"
                         else:
                             full_message = full_response
