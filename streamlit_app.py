@@ -393,6 +393,37 @@ Examples:
 - "ASML" → ASML
 - "Novo Nordisk" → NVO
 
+Index funds, ETFs, and market indices:
+- "S&P 500" → ^GSPC
+- "SPY ETF" → SPY
+- "How is the S&P doing?" → ^GSPC
+- "Nasdaq" → ^IXIC
+- "QQQ" → QQQ
+- "Nasdaq 100 ETF" → QQQ
+- "Dow Jones" → ^DJI
+- "the Dow" → ^DJI
+- "DIA ETF" → DIA
+- "Russell 2000" → ^RUT
+- "IWM" → IWM
+- "VTI total market" → VTI
+- "VOO" → VOO
+- "Vanguard S&P 500" → VOO
+- "VIX" → ^VIX
+- "volatility index" → ^VIX
+- "fear index" → ^VIX
+- "bond ETF" → BND
+- "AGG bonds" → AGG
+- "tech sector ETF" → XLK
+- "XLF financials" → XLF
+- "energy sector" → XLE
+- "gold ETF" → GLD
+- "silver ETF" → SLV
+- "emerging markets" → EEM
+- "international stocks ETF" → VXUS
+- "ARK Innovation" → ARKK
+- "Bitcoin ETF" → IBIT
+- "Ethereum ETF" → ETHA
+
 User question: "{query}"
 
 Respond with ONLY the ticker symbol or "NONE", nothing else."""
