@@ -580,58 +580,72 @@ with tab4:
     st.markdown("""
     ## Welcome to Your AI-Powered Finance Assistant!
 
-    This application uses multiple specialized AI agents to help you with various financial tasks:
+    This application uses multiple specialized AI agents to help you with various financial tasks.
 
-    ### 🎓 QA Agent (RAG)
-    - Answers general finance questions using a knowledge base of 500+ Investopedia articles
-    - Powered by Retrieval-Augmented Generation (RAG) for accurate, source-based answers
+    ---
 
-    ### 📈 Market Agent
-    - Provides real-time stock prices and market trends
-    - Analyzes market conditions and movements
+    ### 🛡️ Guardrails
 
-    ### 📰 News Agent
-    - Fetches the latest financial news
-    - Keeps you updated on market-moving events
+    All interactions are protected by **AI-powered guardrails** that ensure questions stay on-topic:
+    - Off-topic questions (cooking, sports, entertainment, etc.) are politely declined
+    - Powered by Guardrails AI with custom LLM-based validation
+    - Keeps the assistant focused on finance-related queries
 
-    ### 💰 Tax Agent
-    - Answers tax-related questions
-    - Helps with tax calculations and planning
+    ---
 
-    ### 🎯 Goal Agent
-    - Assists with financial planning
-    - Helps set and track financial goals
+    ### 🤖 Specialized Agents
 
-    ### 📊 Portfolio Agent
-    - Provides portfolio management advice
-    - Analyzes investment allocations
+    | Agent | Description |
+    |-------|-------------|
+    | 🎓 **QA Agent (RAG)** | Answers finance questions using 500+ Investopedia articles |
+    | 📈 **Market Agent** | Real-time stock prices, market trends, and analysis |
+    | 📰 **News Agent** | Latest financial news and market-moving events |
+    | 💰 **Tax Agent** | Tax-related questions and planning |
+    | 🎯 **Goal Agent** | Financial planning and goal setting |
+    | 📊 **Portfolio Agent** | Portfolio management and allocation advice |
+
+    ---
+
+    ### 📊 Market Tab Features
+
+    - **Smart Ticker Recognition**: Just type a company name (e.g., "Apple", "Tesla") - no need to know ticker symbols
+    - **International Support**: Works with US stocks, ADRs, and international exchanges
+    - **Index Funds & ETFs**: S&P 500, Nasdaq, QQQ, SPY, and more
+    - **Interactive Charts**: Candlestick charts with MA20/MA50 moving averages
+    - **Key Metrics**: Price, volume, market cap, P/E ratio, 52-week high/low
 
     ---
 
     ### How It Works
 
-    1. **Ask a Question**: Type your finance question in the chat
-    2. **Smart Routing**: Our router agent analyzes your question and routes it to the most appropriate specialist
-    3. **Get Expert Answer**: The specialist agent processes your question and provides a detailed response
+    1. **Ask a Question**: Type your finance question in any tab
+    2. **Guardrail Check**: AI validates the question is finance-related
+    3. **Smart Routing**: Router agent directs to the appropriate specialist
+    4. **Rich Response**: Get answers with charts and data when applicable
 
     ---
 
     ### Technology Stack
 
-    - **Frontend**: Streamlit
-    - **AI Framework**: LangChain & LangGraph
-    - **LLM**: OpenAI GPT-4o-mini
-    - **Vector Database**: FAISS
-    - **Embeddings**: OpenAI text-embedding-3-small
+    | Component | Technology |
+    |-----------|------------|
+    | **Frontend** | Streamlit |
+    | **AI Framework** | LangChain & LangGraph |
+    | **LLM** | OpenAI GPT-4o-mini |
+    | **Guardrails** | Guardrails AI (Custom Validators) |
+    | **Vector Database** | FAISS |
+    | **Stock Data** | yfinance |
+    | **Charts** | Plotly |
+    | **Observability** | LangSmith |
 
     ---
 
-    **Built with ❤️ using LangChain and Streamlit**
+    **Built with ❤️ using LangChain, LangGraph, and Streamlit**
     """)
 
 # Footer
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>Finance Assistant v2.0 | Powered by LangChain & Streamlit</div>",
+    "<div style='text-align: center; color: gray;'>Finance Assistant v3.0 | Powered by LangChain, LangGraph & Guardrails AI</div>",
     unsafe_allow_html=True
 )
