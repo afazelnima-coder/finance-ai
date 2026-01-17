@@ -9,8 +9,33 @@ import uuid
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from agents import router_agent_v2 as router_agent, news_agent
+from langchain_openai import ChatOpenAI
 
 load_dotenv()
+
+# Shared LLM for guardrails (cached)
+@st.cache_resource
+def get_guardrail_llm():
+    return ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+def is_finance_related(query: str) -> bool:
+    """Check if the query is finance-related using LLM."""
+    llm = get_guardrail_llm()
+    prompt = f"""Determine if this question is related to finance, investing, stocks, markets, economics, or financial news.
+
+Finance-related topics include: stocks, bonds, ETFs, mutual funds, indices, market trends,
+company financials, earnings, dividends, trading, investing, portfolio, cryptocurrency,
+forex, commodities, interest rates, inflation, economic indicators, financial planning,
+financial news, market news, economic news, company news.
+
+NOT finance-related: cooking, sports, entertainment, health, travel, general knowledge, etc.
+
+Question: "{query}"
+
+Respond with ONLY "yes" if finance-related, or "no" if not."""
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return response.content.strip().lower() == "yes"
 
 # Configure page
 st.set_page_config(
@@ -284,6 +309,18 @@ with tab2:
             with st.chat_message("user"):
                 st.markdown(prompt)
 
+            # Guardrail check
+            is_valid = is_finance_related(prompt)
+
+            if not is_valid:
+                with st.chat_message("assistant"):
+                    off_topic_msg = "⚠️ **Off-topic question detected**\n\nI can only help with finance-related news topics such as market news, company earnings, economic indicators, and financial events.\n\nPlease ask a finance-related question!"
+                    st.warning(off_topic_msg)
+                    st.session_state.news_chat_history.append({"role": "user", "content": prompt})
+                    st.session_state.news_chat_history.append({"role": "assistant", "content": off_topic_msg})
+                st.session_state.news_pending_prompt = None
+                st.rerun()
+
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 message_placeholder.markdown("🔍 Searching for news...▌")
@@ -345,16 +382,10 @@ with tab3:
     import yfinance as yf
     import plotly.graph_objects as go
     from datetime import datetime, timedelta
-    from langchain_openai import ChatOpenAI
-
-    # LLM for ticker extraction
-    @st.cache_resource
-    def get_ticker_llm():
-        return ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     def extract_ticker(query: str) -> str | None:
         """Use LLM to extract ticker symbol if a specific company is mentioned."""
-        llm = get_ticker_llm()
+        llm = get_guardrail_llm()
         prompt = f"""Analyze this market question and determine if it mentions a specific publicly traded company.
 
 If a specific company is mentioned, return its stock ticker symbol.
@@ -513,27 +544,34 @@ Respond with ONLY the ticker symbol or "NONE", nothing else."""
             chart_period = st.selectbox("Chart period:", ["1mo", "3mo", "6mo", "1y"], index=2, label_visibility="collapsed")
 
     if submit_button and market_query:
-        # Extract ticker if company mentioned
-        with st.spinner("Analyzing question..."):
-            ticker = extract_ticker(market_query)
+        # Guardrail check
+        with st.spinner("Checking question..."):
+            is_valid = is_finance_related(market_query)
 
-        # Show chart if specific company detected
-        if ticker:
-            display_stock_chart(ticker, chart_period)
-            st.markdown("---")
+        if not is_valid:
+            st.warning("⚠️ **Off-topic question detected**\n\nI can only help with finance-related questions such as stocks, ETFs, market trends, company performance, and investing topics.\n\nPlease ask a finance-related question!")
+        else:
+            # Extract ticker if company mentioned
+            with st.spinner("Analyzing question..."):
+                ticker = extract_ticker(market_query)
 
-        # Get AI response
-        st.markdown("### 💬 Market Analysis")
-        with st.spinner("Getting market insights..."):
-            try:
-                from agents import market_agent
-                response = market_agent.agent.invoke(
-                    {"messages": [HumanMessage(content=market_query)]}
-                )
-                market_response = response["messages"][-1].content
-                st.markdown(market_response)
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+            # Show chart if specific company detected
+            if ticker:
+                display_stock_chart(ticker, chart_period)
+                st.markdown("---")
+
+            # Get AI response
+            st.markdown("### 💬 Market Analysis")
+            with st.spinner("Getting market insights..."):
+                try:
+                    from agents import market_agent
+                    response = market_agent.agent.invoke(
+                        {"messages": [HumanMessage(content=market_query)]}
+                    )
+                    market_response = response["messages"][-1].content
+                    st.markdown(market_response)
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
 
 # Tab 4: About
 with tab4:
