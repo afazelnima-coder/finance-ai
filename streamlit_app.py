@@ -342,24 +342,130 @@ with tab2:
 with tab3:
     st.header("📊 Market Overview")
 
-    st.markdown("""
-    ### Quick Market Lookup
-    Enter a stock symbol or ask about market trends.
-    """)
+    import yfinance as yf
+    import plotly.graph_objects as go
+    from datetime import datetime, timedelta
 
+    # Ticker lookup section
+    st.markdown("### Stock Lookup")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        ticker_input = st.text_input("Enter ticker symbol:", placeholder="e.g., AAPL, MSFT, GOOGL", key="ticker_input")
+    with col2:
+        period = st.selectbox("Time period:", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=2, key="period_select")
+
+    if ticker_input:
+        ticker = ticker_input.upper().strip()
+        with st.spinner(f"Fetching data for {ticker}..."):
+            try:
+                stock = yf.Ticker(ticker)
+                info = stock.info
+                hist = stock.history(period=period)
+
+                if hist.empty:
+                    st.error(f"No data found for ticker: {ticker}")
+                else:
+                    # Company header
+                    company_name = info.get("longName", ticker)
+                    st.subheader(f"{company_name} ({ticker})")
+
+                    # Key metrics row
+                    col1, col2, col3, col4 = st.columns(4)
+
+                    current_price = info.get("currentPrice") or info.get("regularMarketPrice") or hist["Close"].iloc[-1]
+                    prev_close = info.get("previousClose") or (hist["Close"].iloc[-2] if len(hist) > 1 else current_price)
+                    price_change = current_price - prev_close
+                    price_change_pct = (price_change / prev_close) * 100 if prev_close else 0
+
+                    with col1:
+                        st.metric("Price", f"${current_price:.2f}", f"{price_change:+.2f} ({price_change_pct:+.2f}%)")
+                    with col2:
+                        volume = info.get("volume") or info.get("regularMarketVolume") or 0
+                        st.metric("Volume", f"{volume:,.0f}")
+                    with col3:
+                        market_cap = info.get("marketCap", 0)
+                        if market_cap >= 1e12:
+                            st.metric("Market Cap", f"${market_cap/1e12:.2f}T")
+                        elif market_cap >= 1e9:
+                            st.metric("Market Cap", f"${market_cap/1e9:.2f}B")
+                        else:
+                            st.metric("Market Cap", f"${market_cap/1e6:.2f}M")
+                    with col4:
+                        pe_ratio = info.get("trailingPE", "N/A")
+                        st.metric("P/E Ratio", f"{pe_ratio:.2f}" if isinstance(pe_ratio, (int, float)) else pe_ratio)
+
+                    # Additional metrics row
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        high_52 = info.get("fiftyTwoWeekHigh", "N/A")
+                        st.metric("52W High", f"${high_52:.2f}" if isinstance(high_52, (int, float)) else high_52)
+                    with col2:
+                        low_52 = info.get("fiftyTwoWeekLow", "N/A")
+                        st.metric("52W Low", f"${low_52:.2f}" if isinstance(low_52, (int, float)) else low_52)
+                    with col3:
+                        div_yield = info.get("dividendYield", 0) or 0
+                        st.metric("Dividend Yield", f"{div_yield*100:.2f}%")
+                    with col4:
+                        sector = info.get("sector", "N/A")
+                        st.metric("Sector", sector[:15] + "..." if len(str(sector)) > 15 else sector)
+
+                    # Price chart
+                    st.markdown("### Price Chart")
+                    fig = go.Figure()
+
+                    # Candlestick chart
+                    fig.add_trace(go.Candlestick(
+                        x=hist.index,
+                        open=hist['Open'],
+                        high=hist['High'],
+                        low=hist['Low'],
+                        close=hist['Close'],
+                        name='Price'
+                    ))
+
+                    # Add moving averages
+                    if len(hist) >= 20:
+                        hist['MA20'] = hist['Close'].rolling(window=20).mean()
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['MA20'], mode='lines', name='MA20', line=dict(color='orange', width=1)))
+                    if len(hist) >= 50:
+                        hist['MA50'] = hist['Close'].rolling(window=50).mean()
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['MA50'], mode='lines', name='MA50', line=dict(color='blue', width=1)))
+
+                    fig.update_layout(
+                        xaxis_rangeslider_visible=False,
+                        height=400,
+                        margin=dict(l=0, r=0, t=30, b=0),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # Volume chart
+                    st.markdown("### Volume")
+                    colors = ['green' if hist['Close'].iloc[i] >= hist['Open'].iloc[i] else 'red' for i in range(len(hist))]
+                    fig_vol = go.Figure(go.Bar(x=hist.index, y=hist['Volume'], marker_color=colors))
+                    fig_vol.update_layout(height=150, margin=dict(l=0, r=0, t=10, b=0))
+                    st.plotly_chart(fig_vol, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Error fetching data: {str(e)}")
+
+    st.markdown("---")
+
+    # Keep the AI assistant for market questions
+    st.markdown("### Ask Market Questions")
     with st.form(key="market_form"):
-        market_query = st.text_input("Enter your market question:", placeholder="e.g., What's the current price of AAPL?")
-        submit_button = st.form_submit_button("Get Market Data")
+        market_query = st.text_input("Ask about market trends:", placeholder="e.g., What's driving tech stocks today?")
+        submit_button = st.form_submit_button("Ask")
 
     if submit_button and market_query:
-        with st.spinner("Fetching market data..."):
+        with st.spinner("Analyzing..."):
             try:
                 from agents import market_agent
                 response = market_agent.agent.invoke(
                     {"messages": [HumanMessage(content=market_query)]}
                 )
                 market_response = response["messages"][-1].content
-                st.success("Market Data")
                 st.markdown(market_response)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
