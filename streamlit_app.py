@@ -347,9 +347,11 @@ with tab3:
     Enter a stock symbol or ask about market trends.
     """)
 
-    market_query = st.text_input("Enter your market question:", placeholder="e.g., What's the current price of AAPL?")
+    with st.form(key="market_form"):
+        market_query = st.text_input("Enter your market question:", placeholder="e.g., What's the current price of AAPL?")
+        submit_button = st.form_submit_button("Get Market Data")
 
-    if st.button("Get Market Data") and market_query:
+    if submit_button and market_query:
         with st.spinner("Fetching market data..."):
             try:
                 from agents import market_agent
