@@ -190,11 +190,15 @@ The main orchestrator built with LangGraph. It:
 3. Routes to the appropriate specialized agent
 4. Returns the response
 
-**Graph Structure:**
-```
-START → guardrail → [on-topic?] → router → [agent] → END
-                  → [off-topic] → off_topic → END
-```
+**LangGraph StateGraph:**
+
+![StateGraph](docs/state_graph.png)
+
+The graph shows the routing flow:
+- **guardrail** → Validates if the query is finance-related
+- **off_topic** → Handles non-finance queries with a polite decline
+- **router** → Routes finance queries to the appropriate specialized agent
+- **qa, market, news, tax, goal, portfolio** → Specialized agents for different domains
 
 ### QA Agent (`qa_agent.py`)
 
