@@ -95,9 +95,9 @@ Finance Assistant is a multi-agent AI system designed to provide comprehensive f
 │  │       │       │ │       │       │ │       │       │ │               │        │
 │  │       ▼       │ │       ▼       │ │       ▼       │ │               │        │
 │  │ ┌───────────┐ │ │ ┌───────────┐ │ │ ┌───────────┐ │ │               │        │
-│  │ │   FAISS   │ │ │ │   Alpha   │ │ │ │  Tavily   │ │ │               │        │
-│  │ │  Vector   │ │ │ │  Vantage  │ │ │ │   API     │ │ │               │        │
-│  │ │    DB     │ │ │ │    API    │ │ │ │           │ │ │               │        │
+│  │ │   FAISS   │ │ │ │  yFinance │ │ │ │  Tavily   │ │ │               │        │
+│  │ │  Vector   │ │ │ │           │ │ │ │ Alpha V   │ │ │               │        │
+│  │ │    DB     │ │ │ │    API    │ │ │ │   APIs    │ │ │               │        │
 │  │ └───────────┘ │ │ └───────────┘ │ │ └───────────┘ │ │               │        │
 │  └───────────────┘ └───────────────┘ └───────────────┘ └───────────────┘        │
 │                                                                                  │
