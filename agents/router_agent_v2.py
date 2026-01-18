@@ -37,7 +37,27 @@ class FinanceTopicValidator(Validator):
 
     def validate(self, value: str, metadata: Dict[str, Any] = {}) -> ValidationResult:
         """Check if the input is finance-related using LLM."""
-        prompt = f"""You are a topic classifier. Determine if the following user message is related to finance topics.
+        # Get conversation context from metadata if available
+        conversation_context = metadata.get("conversation_context", "")
+
+        if conversation_context:
+            prompt = f"""You are a topic classifier. Determine if the following user message is related to finance topics.
+Consider the conversation context to understand follow-up questions.
+
+Finance topics include: {', '.join(self.valid_topics)}
+
+Recent conversation:
+{conversation_context}
+
+Current user message: "{value}"
+
+IMPORTANT: If the current message is a follow-up question (like "what are the most common?", "tell me more", "which one is best?")
+that refers to a previous finance-related topic, it should be considered finance-related.
+
+Respond with ONLY "yes" if the message is related to finance (either directly or as a follow-up), or "no" if it is not related to finance.
+Do not explain your reasoning, just respond with "yes" or "no"."""
+        else:
+            prompt = f"""You are a topic classifier. Determine if the following user message is related to finance topics.
 
 Finance topics include: {', '.join(self.valid_topics)}
 
@@ -75,9 +95,25 @@ def guardrail_node(state: State):
 
     print("🛡️ Checking topic relevance...")
 
+    # Build conversation context from recent messages (last 4 messages for context)
+    conversation_context = ""
+    if len(messages) > 1:
+        # Get up to 4 recent messages before the current one for context
+        context_messages = messages[-5:-1] if len(messages) > 5 else messages[:-1]
+        context_parts = []
+        for msg in context_messages:
+            role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+            # Truncate long messages to avoid token bloat
+            content = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+            context_parts.append(f"{role}: {content}")
+        conversation_context = "\n".join(context_parts)
+
     try:
-        # Validate the message against the finance topic guardrail
-        result = finance_guard.validate(last_message)
+        # Validate the message against the finance topic guardrail with context
+        result = finance_guard.validate(
+            last_message,
+            metadata={"conversation_context": conversation_context}
+        )
         is_valid = result.validation_passed
 
         if is_valid:
