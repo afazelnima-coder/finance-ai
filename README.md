@@ -1,5 +1,13 @@
 # Finance Assistant
 
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-Multi--Agent-412991?logo=openai&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-API-000000?logo=openai)
+![RAG](https://img.shields.io/badge/RAG-Retrieval--Augmented_Generation-2E8B57)
+![Finance](https://img.shields.io/badge/Finance-Agent-1E7F4B)
+
+
 A multi-agent AI-powered finance assistant built with LangChain, LangGraph, and Streamlit. The application uses specialized agents to answer finance questions, provide market data, fetch news, and more.
 
 ## Features
