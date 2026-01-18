@@ -359,3 +359,24 @@ Get a free API key at [alphavantage.co](https://www.alphavantage.co/support/#api
 
 ### LangSmith
 Sign up at [smith.langchain.com](https://smith.langchain.com) for observability
+
+## Documentation
+
+For detailed documentation, see the [docs/](./docs/) folder:
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](./docs/architecture.md) | System design, data flow, component diagrams |
+| [Setup Guide](./docs/setup.md) | Comprehensive installation and deployment |
+| [API Reference](./docs/api.md) | Agent APIs, functions, parameters |
+| [Usage Guide](./docs/usage.md) | Examples, tutorials, best practices |
+| [Troubleshooting](./docs/troubleshooting.md) | Common issues and solutions |
+| [Development](./docs/development.md) | Contributing, adding agents, testing |
+
+## License
+
+MIT License
+
+## Contributing
+
+See [Development Guide](./docs/development.md) for contribution guidelines.
