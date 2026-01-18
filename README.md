@@ -309,10 +309,31 @@ Access your traces at [smith.langchain.com](https://smith.langchain.com)
 
 ### Running Tests
 
+The project includes 56 unit tests covering guardrails, routing, and ticker extraction.
+
 ```bash
-# Test router agent directly
-uv run python -m agents.router_agent_v2
+# Run all tests
+uv run pytest
+
+# Run with verbose output
+uv run pytest -v
+
+# Run specific test file
+uv run pytest tests/test_guardrails.py
+
+# Run tests matching a pattern
+uv run pytest -k "guardrail"
+
+# Run with coverage
+uv run pytest --cov=agents --cov=utils
 ```
+
+**Test files:**
+- `tests/test_guardrails.py` - Finance topic validation tests
+- `tests/test_router.py` - Agent routing logic tests
+- `tests/test_ticker.py` - Ticker extraction tests
+
+See [Development Guide](./docs/development.md#testing) for detailed testing documentation.
 
 ### Project Commands
 

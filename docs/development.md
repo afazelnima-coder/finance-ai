@@ -54,6 +54,15 @@ cap-proj/
 │   ├── tax_agent.py          # Tax agent
 │   ├── goal_agent.py         # Goal planning agent
 │   └── portfolio_agent.py    # Portfolio agent
+├── tests/                     # Unit tests
+│   ├── __init__.py
+│   ├── conftest.py           # Pytest fixtures
+│   ├── test_guardrails.py    # Guardrail validation tests
+│   ├── test_router.py        # Router agent tests
+│   └── test_ticker.py        # Ticker extraction tests
+├── utils/                     # Utility modules
+│   ├── __init__.py
+│   └── ticker_utils.py       # Ticker extraction utilities
 ├── rag/                       # RAG components
 │   └── vector_db_loader.py   # FAISS loader
 ├── docs/                      # Documentation
@@ -63,6 +72,7 @@ cap-proj/
 │   ├── usage.md
 │   └── troubleshooting.md
 ├── streamlit_app.py          # Main application
+├── pytest.ini                # Pytest configuration
 ├── requirements.txt          # Dependencies
 ├── .env                      # Environment variables
 └── README.md                 # Project overview
@@ -223,66 +233,264 @@ if submit_button and user_query:
 
 ## Testing
 
-### Unit Tests
+The project uses **pytest** for unit testing with mock-based tests to avoid API calls during testing.
 
-Create `tests/test_agents.py`:
+### Test Structure
 
-```python
-import pytest
-from langchain_core.messages import HumanMessage
-
-def test_qa_agent():
-    from agents import qa_agent
-    
-    response = qa_agent.agent.invoke({
-        "messages": [HumanMessage(content="What is a stock?")]
-    })
-    
-    assert response["messages"]
-    assert len(response["messages"][-1].content) > 0
-
-def test_guardrail_blocks_offtopic():
-    from streamlit_app import is_finance_related
-    
-    assert is_finance_related("What is a bond?") == True
-    assert is_finance_related("Best pizza recipe?") == False
-
-def test_ticker_extraction():
-    from streamlit_app import extract_ticker
-    
-    assert extract_ticker("Apple stock") == "AAPL"
-    assert extract_ticker("How is Tesla?") == "TSLA"
-    assert extract_ticker("Market trends") is None
+```
+tests/
+├── __init__.py
+├── conftest.py           # Shared fixtures for all tests
+├── test_guardrails.py    # Tests for guardrail validation
+├── test_router.py        # Tests for router agent logic
+└── test_ticker.py        # Tests for ticker extraction
 ```
 
-### Run Tests
+### Test Categories
+
+#### 1. Guardrail Tests (`test_guardrails.py`)
+
+Tests the finance topic validation system:
+
+| Test Class | Description |
+|------------|-------------|
+| `TestFinanceTopicValidator` | Tests the custom LLM-based validator |
+| `TestGuardrailNode` | Tests the guardrail node in the graph |
+| `TestCheckTopic` | Tests the conditional routing function |
+| `TestOffTopicNode` | Tests the off-topic response handler |
+
+```python
+# Example: Testing guardrail validation
+def test_validator_passes_finance_topic(self, mock_openai_llm):
+    from agents.router_agent_v2 import FinanceTopicValidator
+    validator = FinanceTopicValidator()
+    validator.llm = mock_openai_llm("yes")
+
+    result = validator.validate("What is a stock?")
+    assert result.outcome == "pass"
+```
+
+#### 2. Router Tests (`test_router.py`)
+
+Tests the agent routing logic:
+
+| Test Class | Description |
+|------------|-------------|
+| `TestRouterNode` | Tests routing decisions for different query types |
+| `TestRouteToAgent` | Tests the conditional edge function |
+| `TestAgentNodes` | Tests individual agent node invocations |
+| `TestStateGraphStructure` | Tests the LangGraph workflow structure |
+
+```python
+# Example: Testing routing to market agent
+def test_routes_to_market_for_prices(self, mock_openai_llm):
+    with patch("agents.router_agent_v2.llm", mock_openai_llm("market")):
+        from agents.router_agent_v2 import router_node
+
+        state = {"messages": [HumanMessage(content="What's AAPL's price?")]}
+        result = router_node(state)
+
+        assert result["next_agent"] == "market"
+```
+
+#### 3. Ticker Tests (`test_ticker.py`)
+
+Tests ticker symbol extraction:
+
+| Test Class | Description |
+|------------|-------------|
+| `TestExtractTicker` | Tests LLM-based ticker extraction |
+| `TestQuickTickerLookup` | Tests fast dictionary-based lookup |
+| `TestCommonTickers` | Tests the common tickers dictionary |
+| `TestTickerWithFixtures` | Tests using pytest fixtures |
+
+```python
+# Example: Testing ticker extraction
+def test_extracts_apple_ticker(self, mock_openai_llm):
+    from utils.ticker_utils import extract_ticker
+
+    mock_llm = mock_openai_llm("AAPL")
+    result = extract_ticker("How is Apple doing?", llm=mock_llm)
+
+    assert result == "AAPL"
+```
+
+### Shared Fixtures (`conftest.py`)
+
+The `conftest.py` file provides reusable fixtures:
+
+```python
+@pytest.fixture
+def mock_llm_response():
+    """Factory to create mock LLM responses."""
+    def _create_response(content: str):
+        mock_response = MagicMock()
+        mock_response.content = content
+        return mock_response
+    return _create_response
+
+@pytest.fixture
+def mock_openai_llm(mock_llm_response):
+    """Mock ChatOpenAI that returns configurable responses."""
+    def _create_mock(response_content: str):
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = mock_llm_response(response_content)
+        return mock_llm
+    return _create_mock
+
+@pytest.fixture
+def finance_queries():
+    """Sample finance-related queries for testing."""
+    return ["What is a stock?", "How do I invest in ETFs?", ...]
+
+@pytest.fixture
+def non_finance_queries():
+    """Sample non-finance queries for testing guardrails."""
+    return ["What's the best pizza recipe?", "How do I train for a marathon?", ...]
+```
+
+### Running Tests
 
 ```bash
 # Run all tests
-uv run pytest tests/
+uv run pytest
 
-# Run with coverage
-uv run pytest tests/ --cov=agents --cov-report=html
+# Run with verbose output
+uv run pytest -v
 
-# Run specific test
-uv run pytest tests/test_agents.py::test_qa_agent -v
+# Run specific test file
+uv run pytest tests/test_guardrails.py
+
+# Run specific test class
+uv run pytest tests/test_router.py::TestRouterNode
+
+# Run specific test method
+uv run pytest tests/test_router.py::TestRouterNode::test_routes_to_qa_for_definitions
+
+# Run with short traceback on failures
+uv run pytest --tb=short
+
+# Run and stop on first failure
+uv run pytest -x
+
+# Run tests matching a pattern
+uv run pytest -k "guardrail"
+
+# Run with coverage report
+uv run pytest --cov=agents --cov=utils --cov-report=html
+```
+
+### Pytest Command Options
+
+| Option | Description |
+|--------|-------------|
+| `-v` | Verbose output - shows each test name |
+| `-vv` | More verbose - shows full diff on failures |
+| `--tb=short` | Short traceback format |
+| `--tb=no` | No traceback on failures |
+| `-x` | Stop on first failure |
+| `-k "pattern"` | Run tests matching pattern |
+| `--cov=module` | Generate coverage for module |
+| `--cov-report=html` | HTML coverage report |
+| `-n auto` | Run tests in parallel (requires pytest-xdist) |
+
+### Writing New Tests
+
+#### 1. Create a test file
+
+```python
+# tests/test_new_feature.py
+import pytest
+from unittest.mock import patch, MagicMock
+
+class TestNewFeature:
+    """Tests for the new feature."""
+
+    def test_basic_functionality(self):
+        """Test that basic functionality works."""
+        # Arrange
+        input_data = "test input"
+
+        # Act
+        result = my_function(input_data)
+
+        # Assert
+        assert result == expected_output
+
+    def test_with_mock(self, mock_openai_llm):
+        """Test with mocked LLM."""
+        with patch("module.llm", mock_openai_llm("expected response")):
+            result = function_using_llm("query")
+            assert result == "expected response"
+```
+
+#### 2. Use fixtures for common data
+
+```python
+# In conftest.py
+@pytest.fixture
+def sample_data():
+    return {"key": "value"}
+
+# In test file
+def test_with_fixture(sample_data):
+    assert sample_data["key"] == "value"
+```
+
+#### 3. Mock external dependencies
+
+```python
+# Mock API calls to avoid real requests during tests
+with patch("requests.get") as mock_get:
+    mock_get.return_value.json.return_value = {"data": "test"}
+    result = fetch_data()
+    assert result == {"data": "test"}
+```
+
+### Test Configuration (`pytest.ini`)
+
+```ini
+[pytest]
+testpaths = tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+addopts = -v --tb=short
+filterwarnings =
+    ignore::DeprecationWarning
+    ignore::PendingDeprecationWarning
 ```
 
 ### Integration Tests
 
+For testing the full agent flow (requires API keys):
+
 ```python
+@pytest.mark.integration
 def test_full_routing_flow():
+    """Integration test for complete routing flow."""
     from agents import router_agent_v2
     from langchain_core.messages import HumanMessage
-    
+
     config = {"configurable": {"thread_id": "test"}}
-    
-    # Test QA routing
+
     response = router_agent_v2.agent.invoke(
         {"messages": [HumanMessage(content="What is inflation?")]},
         config=config
     )
-    assert "QA" in str(response) or len(response["messages"]) > 1
+
+    assert len(response["messages"]) > 1
+    assert response["messages"][-1].content  # Has response content
+```
+
+Run integration tests separately:
+
+```bash
+# Skip integration tests (default)
+uv run pytest -m "not integration"
+
+# Run only integration tests
+uv run pytest -m integration
 ```
 
 ---
