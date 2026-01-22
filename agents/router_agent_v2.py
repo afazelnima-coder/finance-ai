@@ -149,8 +149,42 @@ def router_node(state: State):
     messages = state["messages"]
     last_message = messages[-1].content if messages else ""
 
+    # Build conversation context from recent messages for better routing of follow-ups
+    conversation_context = ""
+    if len(messages) > 1:
+        context_messages = messages[-5:-1] if len(messages) > 5 else messages[:-1]
+        context_parts = []
+        for msg in context_messages:
+            role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+            content = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+            context_parts.append(f"{role}: {content}")
+        conversation_context = "\n".join(context_parts)
+
     # Use LLM to classify the query
-    routing_prompt = f"""You are a routing assistant for a financial advice system.
+    if conversation_context:
+        routing_prompt = f"""You are a routing assistant for a financial advice system.
+    Analyze the user's question and decide which specialized agent should handle it.
+    Consider the conversation context to understand follow-up questions.
+
+    Available agents:
+    - qa: General finance concepts and definitions (use for "what is", "explain", "define")
+    - market: Current market data, stock prices, trends
+    - news: Latest financial news and updates
+    - tax: Tax-related questions and calculations
+    - goal: Financial planning, retirement, savings goals
+    - portfolio: Investment portfolio management and allocation, analyzing holdings
+
+    Recent conversation:
+    {conversation_context}
+
+    Current user question: {last_message}
+
+    IMPORTANT: If this is a follow-up question (like "what are the most common?", "tell me more", "which is best?"),
+    route to the SAME agent that handled the previous topic.
+
+    Respond with ONLY the agent name (qa, market, news, tax, goal, or portfolio)."""
+    else:
+        routing_prompt = f"""You are a routing assistant for a financial advice system.
     Analyze the user's question and decide which specialized agent should handle it.
 
     Available agents:
@@ -159,7 +193,7 @@ def router_node(state: State):
     - news: Latest financial news and updates
     - tax: Tax-related questions and calculations
     - goal: Financial planning, retirement, savings goals
-    - portfolio: Investment portfolio management and allocation
+    - portfolio: Investment portfolio management and allocation, analyzing holdings
 
     User question: {last_message}
 

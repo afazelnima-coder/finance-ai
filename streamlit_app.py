@@ -78,7 +78,7 @@ with st.sidebar:
         st.rerun()
 
 # Main content - Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📰 News", "📊 Market", "ℹ️ About"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["💬 Chat", "📰 News", "📊 Market", "📈 Portfolio", "ℹ️ About"])
 
 # Tab 1: Chat Interface
 with tab1:
@@ -573,8 +573,233 @@ Respond with ONLY the ticker symbol or "NONE", nothing else."""
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
-# Tab 4: About
+# Tab 4: Portfolio
 with tab4:
+    st.header("📈 Portfolio Analyzer")
+
+    from agents import portfolio_agent
+    from agents.portfolio_visualizations import (
+        create_allocation_pie_chart,
+        create_holdings_bar_chart,
+        create_expense_comparison_chart,
+        create_risk_gauge,
+        create_diversification_gauge,
+        create_goal_projection_chart
+    )
+
+    # Initialize portfolio session state
+    if "portfolio_data" not in st.session_state:
+        st.session_state.portfolio_data = None
+
+    st.markdown("""
+    Enter your portfolio details below to get a comprehensive analysis with visualizations.
+    You can describe your portfolio naturally, for example:
+    - "I have $200K: 50% in VOO, 30% in BND, 20% in a target date 2045 fund"
+    - "AAPL $25,000, MSFT $20,000, VOO $40,000, BND $15,000"
+    """)
+
+    # Portfolio input
+    with st.form(key="portfolio_form"):
+        portfolio_input = st.text_area(
+            "Describe your portfolio:",
+            placeholder="Example: I have $150K total: 60% in S&P 500 index fund (VOO), 25% in bonds (BND), 15% in international stocks (VXUS)",
+            height=100
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            monthly_contribution = st.number_input(
+                "Monthly contribution ($)",
+                min_value=0,
+                value=500,
+                step=100,
+                help="For growth projection chart"
+            )
+        with col2:
+            projection_years = st.slider(
+                "Projection years",
+                min_value=5,
+                max_value=40,
+                value=20,
+                help="For growth projection chart"
+            )
+
+        analyze_button = st.form_submit_button("Analyze Portfolio", use_container_width=True)
+
+    if analyze_button and portfolio_input:
+        with st.spinner("Analyzing your portfolio..."):
+            try:
+                # Parse and analyze portfolio
+                total_value, parsed_holdings = portfolio_agent.parse_portfolio(portfolio_input)
+
+                if not parsed_holdings:
+                    st.error("Could not parse portfolio. Please describe it more clearly.")
+                else:
+                    # Build holdings and calculate metrics
+                    holdings = []
+                    for h in parsed_holdings:
+                        ticker = h.get("ticker")
+                        name = h.get("name", "Unknown")
+                        value = float(h.get("value", 0))
+                        asset_type = h.get("asset_type", "us_stock")
+                        is_index = h.get("is_index_fund", False)
+
+                        asset_class = portfolio_agent.get_asset_class(asset_type, ticker)
+                        expense_ratio = portfolio_agent.get_expense_ratio(ticker, name)
+
+                        holdings.append({
+                            "name": name,
+                            "ticker": ticker.upper() if ticker else None,
+                            "value": value,
+                            "asset_class": asset_class.value,
+                            "expense_ratio": expense_ratio,
+                            "is_index_fund": is_index
+                        })
+
+                    # Recalculate total
+                    calculated_total = sum(h["value"] for h in holdings)
+                    if calculated_total > 0:
+                        total_value = calculated_total
+
+                    # Calculate allocations
+                    allocations = {}
+                    for holding in holdings:
+                        ac = holding["asset_class"]
+                        if ac not in allocations:
+                            allocations[ac] = 0
+                        allocations[ac] += (holding["value"] / total_value) * 100
+
+                    # Calculate weighted expense ratio
+                    weighted_expense = 0
+                    for holding in holdings:
+                        if holding["expense_ratio"] is not None:
+                            weight = holding["value"] / total_value
+                            weighted_expense += holding["expense_ratio"] * weight
+
+                    annual_fee_cost = total_value * weighted_expense / 100
+
+                    # Build Holding objects for score calculation
+                    holding_objects = [
+                        portfolio_agent.Holding(
+                            name=h["name"],
+                            ticker=h["ticker"],
+                            value=h["value"],
+                            asset_class=portfolio_agent.AssetClass(h["asset_class"]),
+                            expense_ratio=h["expense_ratio"],
+                            is_index_fund=h["is_index_fund"]
+                        )
+                        for h in holdings
+                    ]
+
+                    # Calculate scores
+                    div_score = portfolio_agent.calculate_diversification_score(holding_objects, allocations)
+                    risk_level, risk_factors = portfolio_agent.assess_risk(holding_objects, allocations)
+
+                    # Store in session state
+                    st.session_state.portfolio_data = {
+                        "total_value": total_value,
+                        "holdings": holdings,
+                        "allocations": allocations,
+                        "weighted_expense_ratio": weighted_expense,
+                        "annual_fee_cost": annual_fee_cost,
+                        "diversification_score": div_score,
+                        "risk_level": risk_level,
+                        "risk_factors": risk_factors,
+                        "monthly_contribution": monthly_contribution,
+                        "projection_years": projection_years
+                    }
+
+            except Exception as e:
+                st.error(f"Error analyzing portfolio: {str(e)}")
+
+    # Display results if we have portfolio data
+    if st.session_state.portfolio_data:
+        data = st.session_state.portfolio_data
+
+        # Summary metrics
+        st.markdown("---")
+        st.subheader("Portfolio Summary")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Value", f"${data['total_value']:,.0f}")
+        with col2:
+            st.metric("Expense Ratio", f"{data['weighted_expense_ratio']:.3f}%")
+        with col3:
+            st.metric("Annual Fees", f"${data['annual_fee_cost']:,.0f}")
+        with col4:
+            st.metric("Holdings", len(data['holdings']))
+
+        st.markdown("---")
+
+        # Charts Row 1: Pie Chart and Holdings Bar
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Asset Allocation")
+            pie_chart = create_allocation_pie_chart(
+                data['allocations'],
+                data['total_value']
+            )
+            st.plotly_chart(pie_chart, use_container_width=True)
+
+        with col2:
+            st.subheader("Holdings Breakdown")
+            bar_chart = create_holdings_bar_chart(data['holdings'])
+            st.plotly_chart(bar_chart, use_container_width=True)
+
+        # Charts Row 2: Risk and Diversification Gauges
+        col1, col2 = st.columns(2)
+
+        with col1:
+            risk_gauge = create_risk_gauge(data['risk_level'])
+            st.plotly_chart(risk_gauge, use_container_width=True)
+
+            # Risk factors
+            st.markdown("**Risk Factors:**")
+            for factor in data['risk_factors']:
+                st.markdown(f"- {factor}")
+
+        with col2:
+            div_gauge = create_diversification_gauge(data['diversification_score'])
+            st.plotly_chart(div_gauge, use_container_width=True)
+
+        # Expense Ratio Comparison
+        st.markdown("---")
+        st.subheader("Expense Ratio Comparison")
+        expense_chart = create_expense_comparison_chart(data['holdings'])
+        st.plotly_chart(expense_chart, use_container_width=True)
+
+        # Growth Projection
+        st.markdown("---")
+        st.subheader("Growth Projection")
+        projection_chart = create_goal_projection_chart(
+            data['total_value'],
+            data['monthly_contribution'],
+            data['projection_years']
+        )
+        st.plotly_chart(projection_chart, use_container_width=True)
+
+        # Detailed Holdings Table
+        st.markdown("---")
+        st.subheader("Holdings Detail")
+        import pandas as pd
+
+        holdings_df = pd.DataFrame([
+            {
+                "Name": h["name"],
+                "Ticker": h["ticker"] or "-",
+                "Value": f"${h['value']:,.0f}",
+                "Allocation": f"{(h['value']/data['total_value'])*100:.1f}%",
+                "Asset Class": h["asset_class"],
+                "Expense Ratio": f"{h['expense_ratio']:.2f}%" if h["expense_ratio"] else "-"
+            }
+            for h in sorted(data['holdings'], key=lambda x: x['value'], reverse=True)
+        ])
+        st.dataframe(holdings_df, use_container_width=True, hide_index=True)
+
+# Tab 5: About
+with tab5:
     st.header("ℹ️ About Finance Assistant")
 
     st.markdown("""
@@ -613,6 +838,18 @@ with tab4:
     - **Index Funds & ETFs**: S&P 500, Nasdaq, QQQ, SPY, and more
     - **Interactive Charts**: Candlestick charts with MA20/MA50 moving averages
     - **Key Metrics**: Price, volume, market cap, P/E ratio, 52-week high/low
+
+    ---
+
+    ### 📈 Portfolio Tab Features
+
+    - **Natural Language Input**: Describe your portfolio in plain English
+    - **Asset Allocation Pie Chart**: Visual breakdown by asset class
+    - **Holdings Bar Graph**: See your largest positions at a glance
+    - **Expense Ratio Analysis**: Compare fees across holdings
+    - **Risk Assessment Gauge**: Visual risk level indicator
+    - **Diversification Score**: 0-100 score with breakdown
+    - **Growth Projection Chart**: See potential growth over time with different return scenarios
 
     ---
 
