@@ -130,8 +130,8 @@ class TestGuardrailNode:
             state = {"messages": []}
             result = guardrail_node(state)
 
-            # Should validate empty string
-            mock_guard.validate.assert_called_once_with("")
+            # Should validate empty string with metadata
+            mock_guard.validate.assert_called_once_with("", metadata={"conversation_context": ""})
 
 
 class TestCheckTopic:
