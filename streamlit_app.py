@@ -4,6 +4,13 @@ from langchain.messages import HumanMessage
 import sys
 import os
 import uuid
+import logging
+
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    level=logging.WARNING,
+)
+logging.getLogger("utils.mcp_cache").setLevel(logging.INFO)
 
 # Add the parent directory to sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
