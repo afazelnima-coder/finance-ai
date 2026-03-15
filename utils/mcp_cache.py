@@ -11,6 +11,15 @@ TTLs by tool:
 Note: TTLCache is not thread-safe. This is fine for a single-worker uvicorn
 process (all async I/O runs on one thread). If you add multiple uvicorn
 workers, wrap cache access with a threading.Lock.
+
+Monkey-patching:
+  At the bottom of this module the four LangChain @tool objects have their
+  .func attribute replaced with the cached wrappers.  Any caller that goes
+  through tool.invoke() → tool.func() — including LangGraph agents and the
+  Streamlit web app — therefore benefits from the TTL cache transparently.
+  Import this module before the first tool call to activate patching:
+
+      import utils.mcp_cache  # in streamlit_app.py, mcp_server.py, etc.
 """
 
 import logging
@@ -31,6 +40,16 @@ _market_overview_cache: TTLCache = TTLCache(maxsize=1,   ttl=60)
 _portfolio_cache:      TTLCache = TTLCache(maxsize=64,  ttl=300)
 _expense_cache:        TTLCache = TTLCache(maxsize=128, ttl=3600)
 _ticker_cache:         TTLCache = TTLCache(maxsize=256, ttl=86400)
+
+# ── Capture originals before any monkey-patching ──────────────────────────
+# Used inside the cached wrappers so that patching .func on the tool objects
+# later does not create infinite recursion.
+
+_orig_get_market_data      = getMarketData.func
+_orig_get_market_overview  = getMarketOverview.func
+_orig_analyze_portfolio    = analyzePortfolio.func
+_orig_lookup_expense_ratio = lookupExpenseRatio.func
+_orig_extract_ticker       = extract_ticker
 
 
 # ── Internal helper ────────────────────────────────────────────────────────
@@ -53,7 +72,7 @@ def cached_get_market_data(symbol: str) -> str:
     return _get_or_set(
         _market_data_cache, key,
         f"get_market_data({symbol.upper()})",
-        lambda: getMarketData.func(symbol),
+        lambda: _orig_get_market_data(symbol),
     )
 
 
@@ -62,7 +81,7 @@ def cached_get_market_overview() -> str:
     return _get_or_set(
         _market_overview_cache, key,
         "get_market_overview()",
-        getMarketOverview.func,
+        _orig_get_market_overview,
     )
 
 
@@ -71,7 +90,7 @@ def cached_analyze_portfolio(portfolio_description: str) -> str:
     return _get_or_set(
         _portfolio_cache, key,
         "analyze_portfolio(...)",
-        lambda: analyzePortfolio.func(portfolio_description),
+        lambda: _orig_analyze_portfolio(portfolio_description),
     )
 
 
@@ -80,7 +99,7 @@ def cached_lookup_expense_ratio(fund_identifier: str) -> str:
     return _get_or_set(
         _expense_cache, key,
         f"lookup_expense_ratio({fund_identifier.upper().strip()})",
-        lambda: lookupExpenseRatio.func(fund_identifier),
+        lambda: _orig_lookup_expense_ratio(fund_identifier),
     )
 
 
@@ -89,7 +108,7 @@ def cached_extract_ticker(query: str) -> str | None:
     return _get_or_set(
         _ticker_cache, key,
         f"extract_ticker({query.strip()!r})",
-        lambda: extract_ticker(query),
+        lambda: _orig_extract_ticker(query),
     )
 
 
@@ -103,3 +122,15 @@ def cache_info() -> dict:
         "lookup_expense_ratio": {"size": len(_expense_cache),          "maxsize": _expense_cache.maxsize,          "ttl": _expense_cache.ttl},
         "extract_ticker":       {"size": len(_ticker_cache),           "maxsize": _ticker_cache.maxsize,           "ttl": _ticker_cache.ttl},
     }
+
+
+# ── Monkey-patch tool .func attributes ────────────────────────────────────
+# LangChain StructuredTool calls self.func(*args, **kwargs) on every
+# tool.invoke() / tool.run() call.  Replacing .func with the cached wrapper
+# means every caller — MCP server, LangGraph agents, Streamlit — shares the
+# same TTL cache with zero changes to calling code.
+
+getMarketData.func      = cached_get_market_data
+getMarketOverview.func  = cached_get_market_overview
+analyzePortfolio.func   = cached_analyze_portfolio
+lookupExpenseRatio.func = cached_lookup_expense_ratio

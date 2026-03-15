@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from agents import router_agent_v2 as router_agent, news_agent
 from langchain_openai import ChatOpenAI
+import utils.mcp_cache  # activates TTL cache monkey-patching on all tool .func attributes
 
 load_dotenv()
 
@@ -383,6 +384,7 @@ with tab3:
     import plotly.graph_objects as go
     from datetime import datetime, timedelta
 
+    @st.cache_data(ttl=86400)
     def extract_ticker(query: str) -> str | None:
         """Use LLM to extract ticker symbol if a specific company is mentioned."""
         llm = get_guardrail_llm()
