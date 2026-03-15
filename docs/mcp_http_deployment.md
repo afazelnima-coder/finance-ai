@@ -97,13 +97,13 @@ In the AWS Console → EC2 → Security Groups → Inbound rules, add:
 ### 5. Start the services
 
 ```bash
-docker compose -f docker-compose.http.yml up -d --build
+docker-compose -f docker-compose.http.yml up -d --build
 ```
 
 Both containers start independently of the existing project's containers. Verify:
 
 ```bash
-docker compose -f docker-compose.http.yml ps
+docker-compose -f docker-compose.http.yml ps
 ```
 
 Expected output:
@@ -130,13 +130,13 @@ claude mcp list
 ssh -i ~/.ssh/your-key.pem ubuntu@<ec2-ip>
 cd cap-proj
 git pull
-docker compose -f docker-compose.http.yml up -d --build
+docker-compose -f docker-compose.http.yml up -d --build
 ```
 
 ### Stopping the services
 
 ```bash
-docker compose -f docker-compose.http.yml down
+docker-compose -f docker-compose.http.yml down
 ```
 
 This only stops this project's containers — the existing project is unaffected.
@@ -159,7 +159,10 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
+  -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
 # Allow running docker without sudo
 sudo usermod -aG docker $USER
@@ -230,7 +233,7 @@ Then re-run `claude mcp list` to confirm registration.
 **Container exits immediately**
 Check logs:
 ```bash
-docker compose -f docker-compose.http.yml logs mcp-server
-docker compose -f docker-compose.http.yml logs web
+docker-compose -f docker-compose.http.yml logs mcp-server
+docker-compose -f docker-compose.http.yml logs web
 ```
 Most common cause: missing or malformed `.env` file.
