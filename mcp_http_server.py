@@ -2,17 +2,24 @@
 MCP Server (SSE/HTTP transport) — exposes finance assistant tools for remote access.
 
 Usage:
-    uvicorn mcp_http_server:app --host 0.0.0.0 --port 8000
+    uvicorn mcp_http_server:app --host 0.0.0.0 --port 8001
 
 Register with Claude Code CLI:
-    claude mcp add --transport sse finance-assistant http://localhost:8000/sse
+    claude mcp add --transport sse finance-assistant http://localhost:8001/sse
+
+Debug endpoints:
+    GET /cache-stats  — JSON snapshot of all cache sizes and TTLs
 """
 import asyncio
+import json
+import logging
+import logging.config
 
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp import types
 
+from utils.mcp_cache import cache_info
 from utils.mcp_cache import (
     cached_get_market_data,
     cached_get_market_overview,
@@ -20,6 +27,23 @@ from utils.mcp_cache import (
     cached_lookup_expense_ratio,
     cached_extract_ticker,
 )
+
+# ── Logging ───────────────────────────────────────────────────────────────
+
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "default"},
+    },
+    "loggers": {
+        "utils.mcp_cache": {"level": "INFO", "handlers": ["console"], "propagate": False},
+    },
+    "root": {"level": "WARNING", "handlers": ["console"]},
+})
 
 # ── MCP server definition ──────────────────────────────────────────────────
 
@@ -163,6 +187,12 @@ async def app(scope, receive, send) -> None:
                 )
         elif path.startswith("/messages"):
             await sse.handle_post_message(scope, receive, send)
+        elif path == "/cache-stats" and scope.get("method", "").upper() == "GET":
+            body = json.dumps(cache_info(), indent=2).encode()
+            await send({"type": "http.response.start", "status": 200,
+                        "headers": [[b"content-type", b"application/json"],
+                                    [b"content-length", str(len(body)).encode()]]})
+            await send({"type": "http.response.body", "body": body})
         else:
             from starlette.responses import Response
             await Response("Not Found", status_code=404)(scope, receive, send)

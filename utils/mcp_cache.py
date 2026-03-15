@@ -13,54 +13,91 @@ process (all async I/O runs on one thread). If you add multiple uvicorn
 workers, wrap cache access with a threading.Lock.
 """
 
-from cachetools import TTLCache, cached
+import logging
+
+from cachetools import TTLCache
 from cachetools.keys import hashkey
 
 from agents.market_agent import getMarketData, getMarketOverview
 from agents.portfolio_agent import analyzePortfolio, lookupExpenseRatio
 from utils.ticker_utils import extract_ticker
 
+logger = logging.getLogger(__name__)
+
 # ── Per-tool caches ────────────────────────────────────────────────────────
 
-_market_data_cache: TTLCache = TTLCache(maxsize=128, ttl=60)
-_market_overview_cache: TTLCache = TTLCache(maxsize=1, ttl=60)
-_portfolio_cache: TTLCache = TTLCache(maxsize=64, ttl=300)
-_expense_cache: TTLCache = TTLCache(maxsize=128, ttl=3600)
-_ticker_cache: TTLCache = TTLCache(maxsize=256, ttl=86400)
+_market_data_cache:    TTLCache = TTLCache(maxsize=128, ttl=60)
+_market_overview_cache: TTLCache = TTLCache(maxsize=1,   ttl=60)
+_portfolio_cache:      TTLCache = TTLCache(maxsize=64,  ttl=300)
+_expense_cache:        TTLCache = TTLCache(maxsize=128, ttl=3600)
+_ticker_cache:         TTLCache = TTLCache(maxsize=256, ttl=86400)
+
+
+# ── Internal helper ────────────────────────────────────────────────────────
+
+def _get_or_set(cache: TTLCache, key, tool_name: str, fn):
+    """Return cached value if present (HIT), otherwise call fn, store, and return (MISS)."""
+    if key in cache:
+        logger.info("CACHE HIT  | %s", tool_name)
+        return cache[key]
+    logger.info("CACHE MISS | %s", tool_name)
+    result = fn()
+    cache[key] = result
+    return result
 
 
 # ── Cached wrappers ────────────────────────────────────────────────────────
 
-@cached(_market_data_cache, key=lambda symbol: hashkey(symbol.upper()))
 def cached_get_market_data(symbol: str) -> str:
-    return getMarketData.func(symbol)
+    key = hashkey(symbol.upper())
+    return _get_or_set(
+        _market_data_cache, key,
+        f"get_market_data({symbol.upper()})",
+        lambda: getMarketData.func(symbol),
+    )
 
 
-@cached(_market_overview_cache, key=lambda: hashkey("overview"))
 def cached_get_market_overview() -> str:
-    return getMarketOverview.func()
+    key = hashkey("overview")
+    return _get_or_set(
+        _market_overview_cache, key,
+        "get_market_overview()",
+        getMarketOverview.func,
+    )
 
 
-@cached(_portfolio_cache, key=lambda desc: hashkey(desc.strip().lower()))
 def cached_analyze_portfolio(portfolio_description: str) -> str:
-    return analyzePortfolio.func(portfolio_description)
+    key = hashkey(portfolio_description.strip().lower())
+    return _get_or_set(
+        _portfolio_cache, key,
+        "analyze_portfolio(...)",
+        lambda: analyzePortfolio.func(portfolio_description),
+    )
 
 
-@cached(_expense_cache, key=lambda fund: hashkey(fund.upper().strip()))
 def cached_lookup_expense_ratio(fund_identifier: str) -> str:
-    return lookupExpenseRatio.func(fund_identifier)
+    key = hashkey(fund_identifier.upper().strip())
+    return _get_or_set(
+        _expense_cache, key,
+        f"lookup_expense_ratio({fund_identifier.upper().strip()})",
+        lambda: lookupExpenseRatio.func(fund_identifier),
+    )
 
 
-@cached(_ticker_cache, key=lambda query: hashkey(query.strip().lower()))
 def cached_extract_ticker(query: str) -> str | None:
-    return extract_ticker(query)
+    key = hashkey(query.strip().lower())
+    return _get_or_set(
+        _ticker_cache, key,
+        f"extract_ticker({query.strip()!r})",
+        lambda: extract_ticker(query),
+    )
 
 
-# ── Cache stats (useful for debugging / monitoring) ────────────────────────
+# ── Cache stats ────────────────────────────────────────────────────────────
 
 def cache_info() -> dict:
     return {
-        "get_market_data":      {"size": len(_market_data_cache),     "maxsize": _market_data_cache.maxsize,     "ttl": _market_data_cache.ttl},
+        "get_market_data":      {"size": len(_market_data_cache),      "maxsize": _market_data_cache.maxsize,      "ttl": _market_data_cache.ttl},
         "get_market_overview":  {"size": len(_market_overview_cache),  "maxsize": _market_overview_cache.maxsize,  "ttl": _market_overview_cache.ttl},
         "analyze_portfolio":    {"size": len(_portfolio_cache),        "maxsize": _portfolio_cache.maxsize,        "ttl": _portfolio_cache.ttl},
         "lookup_expense_ratio": {"size": len(_expense_cache),          "maxsize": _expense_cache.maxsize,          "ttl": _expense_cache.ttl},
