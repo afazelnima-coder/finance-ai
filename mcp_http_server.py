@@ -13,9 +13,13 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp import types
 
-from agents.market_agent import getMarketData, getMarketOverview
-from agents.portfolio_agent import analyzePortfolio, lookupExpenseRatio
-from utils.ticker_utils import extract_ticker
+from utils.mcp_cache import (
+    cached_get_market_data,
+    cached_get_market_overview,
+    cached_analyze_portfolio,
+    cached_lookup_expense_ratio,
+    cached_extract_ticker,
+)
 
 # ── MCP server definition ──────────────────────────────────────────────────
 
@@ -111,15 +115,15 @@ async def list_tools() -> list[types.Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     if name == "get_market_data":
-        result = getMarketData.func(arguments["symbol"])
+        result = cached_get_market_data(arguments["symbol"])
     elif name == "get_market_overview":
-        result = getMarketOverview.func()
+        result = cached_get_market_overview()
     elif name == "analyze_portfolio":
-        result = analyzePortfolio.func(arguments["portfolio_description"])
+        result = cached_analyze_portfolio(arguments["portfolio_description"])
     elif name == "lookup_expense_ratio":
-        result = lookupExpenseRatio.func(arguments["fund_identifier"])
+        result = cached_lookup_expense_ratio(arguments["fund_identifier"])
     elif name == "extract_ticker":
-        ticker = extract_ticker(arguments["query"])
+        ticker = cached_extract_ticker(arguments["query"])
         result = ticker if ticker else "No specific ticker found"
     else:
         result = f"Unknown tool: {name}"
