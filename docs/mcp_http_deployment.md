@@ -210,6 +210,54 @@ Or add to `~/.claude/claude_desktop_config.json` manually:
 
 ---
 
+## Caching
+
+All five MCP tools are wrapped with in-memory TTL caches (`cachetools.TTLCache`) defined
+in `utils/mcp_cache.py`. On a cache **hit** the result is returned instantly with no
+external API call. On a **miss** the live function runs and the result is stored for the
+TTL duration.
+
+| Tool | TTL | Cache key |
+|---|---|---|
+| `get_market_data` | 60s | ticker symbol (uppercased) |
+| `get_market_overview` | 60s | fixed key `"overview"` |
+| `analyze_portfolio` | 5 min | portfolio description (lowercased + stripped) |
+| `lookup_expense_ratio` | 1 hour | fund identifier (uppercased + stripped) |
+| `extract_ticker` | 24 hours | query (lowercased + stripped) |
+
+### Tuning TTLs
+
+Edit `utils/mcp_cache.py` and change the `ttl=` parameter for the relevant cache:
+
+```python
+# Example: shorten market data freshness to 30 seconds
+_market_data_cache: TTLCache = TTLCache(maxsize=128, ttl=30)
+```
+
+Rebuild the container after any change:
+```bash
+docker-compose -f docker-compose.http.yml up -d --build mcp-server
+```
+
+### Cache limits
+
+Each cache has a `maxsize` that caps the number of entries. When full, the
+least-recently-used entry is evicted regardless of TTL. Increase `maxsize` if you
+serve many distinct tickers or portfolio descriptions:
+
+```python
+_market_data_cache: TTLCache = TTLCache(maxsize=512, ttl=60)
+```
+
+### Scaling beyond a single process
+
+The TTL cache lives in-process. If you scale the MCP server to multiple uvicorn workers
+or replicas, each process has its own independent cache. To share cache state across
+processes, replace `TTLCache` with a Redis backend (`redis-py` + `setex`/`get`), and add
+a Redis service to `docker-compose.http.yml`.
+
+---
+
 ## Troubleshooting
 
 **`No module named X` when starting the server**

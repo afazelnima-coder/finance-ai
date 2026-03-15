@@ -375,6 +375,8 @@ st.session_state.conversation_threads  # Thread mapping
 
 ## Caching Strategy
 
+### Streamlit App Cache
+
 ```python
 # LLM Instance Caching
 @st.cache_resource
@@ -386,6 +388,57 @@ def get_guardrail_llm():
 def get_vectorstore():
     return FAISS.load_local("investopedia_faiss_index", embeddings)
 ```
+
+### MCP Server Cache (`utils/mcp_cache.py`)
+
+All five MCP tools are wrapped with per-tool `TTLCache` instances (from `cachetools`).
+Results are keyed on normalised inputs so identical queries never hit the external API twice
+within the TTL window.
+
+```
+MCP Client request
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│              call_tool()                      │
+│                                               │
+│  cache key = normalise(arguments)             │
+│       │                                       │
+│       ▼                                       │
+│  ┌─────────┐   HIT   ┌──────────────────┐    │
+│  │ TTLCache│────────▶│  Cached result   │    │
+│  └────┬────┘         └──────────────────┘    │
+│       │ MISS                                  │
+│       ▼                                       │
+│  ┌─────────────────┐                          │
+│  │  Agent function │  (yfinance / OpenAI /    │
+│  │  (live call)    │   Tavily / hardcoded)    │
+│  └────────┬────────┘                          │
+│           │                                   │
+│           ▼                                   │
+│  ┌─────────────────┐                          │
+│  │  Store in cache │                          │
+│  │  with TTL       │                          │
+│  └────────┬────────┘                          │
+│           │                                   │
+│           ▼                                   │
+│  ┌──────────────────┐                         │
+│  │  Return result   │                         │
+│  └──────────────────┘                         │
+└──────────────────────────────────────────────┘
+```
+
+| Tool | Cache key | TTL | Max entries | Rationale |
+|---|---|---|---|---|
+| `get_market_data` | `symbol.upper()` | 60s | 128 | Price ticks per second; 1-min staleness acceptable |
+| `get_market_overview` | `"overview"` (fixed) | 60s | 1 | Single no-arg call |
+| `analyze_portfolio` | `description.strip().lower()` | 300s | 64 | Expensive LLM call; same input → same output |
+| `lookup_expense_ratio` | `fund.upper().strip()` | 3600s | 128 | Expense ratios change quarterly |
+| `extract_ticker` | `query.strip().lower()` | 86400s | 256 | Company→ticker mapping is static |
+
+**Thread safety note:** `TTLCache` is not thread-safe. This is safe for a single-worker
+uvicorn process (all async I/O runs on one event-loop thread). Add a `threading.Lock`
+if you run multiple uvicorn workers.
 
 ## Error Handling
 
@@ -414,6 +467,46 @@ def get_vectorstore():
 3. **Rate Limiting**: Dependent on external API limits
 4. **No PII Storage**: Conversations are session-only (InMemorySaver)
 
+## MCP Server Layer
+
+The MCP server exposes the finance assistant's core tools over HTTP/SSE, allowing Claude
+and other MCP clients to call them directly without going through the Streamlit UI.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MCP Clients                               │
+│   Claude Code CLI  │  Claude Desktop  │  Any MCP-compatible LLM │
+└────────────────────┴──────────────────┴─────────────────────────┘
+                                │
+                    SSE / HTTP (port 8001)
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  mcp_http_server.py (uvicorn)                    │
+│                                                                  │
+│  GET /sse  ──▶  open SSE stream, send session_id                │
+│  POST /messages/?session_id=…  ──▶  JSON-RPC dispatch           │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    call_tool()                            │   │
+│  │                                                          │   │
+│  │   get_market_data  │  get_market_overview                │   │
+│  │   analyze_portfolio│  lookup_expense_ratio               │   │
+│  │   extract_ticker                                         │   │
+│  │            │                                             │   │
+│  │            ▼                                             │   │
+│  │   utils/mcp_cache.py  (TTLCache per tool)                │   │
+│  │            │                                             │   │
+│  │            ▼                                             │   │
+│  │   agents/ + utils/  (live call on cache miss)            │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+A stdio variant (`mcp_server.py`) is also available for local Claude Desktop integration.
+
+---
+
 ## Scalability Considerations
 
 | Component | Current | Scalable Alternative |
@@ -422,3 +515,4 @@ def get_vectorstore():
 | Memory | InMemorySaver | Redis, PostgreSQL |
 | LLM | OpenAI API | Self-hosted, Load balanced |
 | Frontend | Single Streamlit | Multiple instances + LB |
+| MCP cache | `cachetools` TTLCache (in-process) | Redis (shared across replicas) |
