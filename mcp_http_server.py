@@ -2,20 +2,48 @@
 MCP Server (SSE/HTTP transport) — exposes finance assistant tools for remote access.
 
 Usage:
-    uvicorn mcp_http_server:app --host 0.0.0.0 --port 8000
+    uvicorn mcp_http_server:app --host 0.0.0.0 --port 8001
 
 Register with Claude Code CLI:
-    claude mcp add --transport sse finance-assistant http://localhost:8000/sse
+    claude mcp add --transport sse finance-assistant http://localhost:8001/sse
+
+Debug endpoints:
+    GET /cache-stats  — JSON snapshot of all cache sizes and TTLs
 """
 import asyncio
+import json
+import logging
+import logging.config
 
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp import types
 
-from agents.market_agent import getMarketData, getMarketOverview
-from agents.portfolio_agent import analyzePortfolio, lookupExpenseRatio
-from utils.ticker_utils import extract_ticker
+from utils.mcp_cache import cache_info
+from utils.mcp_cache import (
+    cached_get_market_data,
+    cached_get_market_overview,
+    cached_analyze_portfolio,
+    cached_lookup_expense_ratio,
+    cached_extract_ticker,
+)
+
+# ── Logging ───────────────────────────────────────────────────────────────
+
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "default"},
+    },
+    "loggers": {
+        "utils.mcp_cache": {"level": "INFO", "handlers": ["console"], "propagate": False},
+    },
+    "root": {"level": "WARNING", "handlers": ["console"]},
+})
 
 # ── MCP server definition ──────────────────────────────────────────────────
 
@@ -111,15 +139,15 @@ async def list_tools() -> list[types.Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     if name == "get_market_data":
-        result = getMarketData.func(arguments["symbol"])
+        result = cached_get_market_data(arguments["symbol"])
     elif name == "get_market_overview":
-        result = getMarketOverview.func()
+        result = cached_get_market_overview()
     elif name == "analyze_portfolio":
-        result = analyzePortfolio.func(arguments["portfolio_description"])
+        result = cached_analyze_portfolio(arguments["portfolio_description"])
     elif name == "lookup_expense_ratio":
-        result = lookupExpenseRatio.func(arguments["fund_identifier"])
+        result = cached_lookup_expense_ratio(arguments["fund_identifier"])
     elif name == "extract_ticker":
-        ticker = extract_ticker(arguments["query"])
+        ticker = cached_extract_ticker(arguments["query"])
         result = ticker if ticker else "No specific ticker found"
     else:
         result = f"Unknown tool: {name}"
@@ -159,6 +187,12 @@ async def app(scope, receive, send) -> None:
                 )
         elif path.startswith("/messages"):
             await sse.handle_post_message(scope, receive, send)
+        elif path == "/cache-stats" and scope.get("method", "").upper() == "GET":
+            body = json.dumps(cache_info(), indent=2).encode()
+            await send({"type": "http.response.start", "status": 200,
+                        "headers": [[b"content-type", b"application/json"],
+                                    [b"content-length", str(len(body)).encode()]]})
+            await send({"type": "http.response.body", "body": body})
         else:
             from starlette.responses import Response
             await Response("Not Found", status_code=404)(scope, receive, send)

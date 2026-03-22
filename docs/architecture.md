@@ -375,6 +375,8 @@ st.session_state.conversation_threads  # Thread mapping
 
 ## Caching Strategy
 
+### Streamlit App Cache
+
 ```python
 # LLM Instance Caching
 @st.cache_resource
@@ -386,6 +388,71 @@ def get_guardrail_llm():
 def get_vectorstore():
     return FAISS.load_local("investopedia_faiss_index", embeddings)
 ```
+
+### Shared Cache Layer (`utils/mcp_cache.py`)
+
+All five tools are wrapped with per-tool `TTLCache` instances (from `cachetools`). The
+cache is active in **both** the MCP server and the Streamlit web app. At import time,
+`utils/mcp_cache.py` monkey-patches the LangChain tool `.func` attributes, so every
+`tool.invoke()` call — whether from the MCP HTTP handler or from a LangGraph agent inside
+Streamlit — transparently goes through the TTL cache.
+
+```
+Caller (MCP HTTP handler or LangGraph agent)
+       │
+       │  tool.invoke("AAPL")  ──or──  cached_get_market_data("AAPL")
+       ▼
+┌──────────────────────────────────────────────┐
+│           utils/mcp_cache.py                  │
+│                                               │
+│  cache key = normalise(input)                 │
+│       │                                       │
+│       ▼                                       │
+│  ┌─────────┐   HIT   ┌──────────────────┐    │
+│  │ TTLCache│────────▶│  Cached result   │    │
+│  └────┬────┘         └──────────────────┘    │
+│       │ MISS                                  │
+│       ▼                                       │
+│  ┌─────────────────┐                          │
+│  │  Original func  │  (yfinance / OpenAI /    │
+│  │  (live call)    │   Tavily / hardcoded)    │
+│  └────────┬────────┘                          │
+│           │                                   │
+│           ▼                                   │
+│  ┌─────────────────┐                          │
+│  │  Store in cache │                          │
+│  │  with TTL       │                          │
+│  └────────┬────────┘                          │
+│           ▼                                   │
+│  ┌──────────────────┐                         │
+│  │  Return result   │                         │
+│  └──────────────────┘                         │
+└──────────────────────────────────────────────┘
+```
+
+| Tool | Cache key | TTL | Max entries | Rationale |
+|---|---|---|---|---|
+| `get_market_data` | `symbol.upper()` | 60s | 128 | Price ticks per second; 1-min staleness acceptable |
+| `get_market_overview` | `"overview"` (fixed) | 60s | 1 | Single no-arg call |
+| `analyze_portfolio` | `description.strip().lower()` | 300s | 64 | Expensive LLM call; same input → same output |
+| `lookup_expense_ratio` | `fund.upper().strip()` | 3600s | 128 | Expense ratios change quarterly |
+| `extract_ticker` | `query.strip().lower()` | 86400s | 256 | Company→ticker mapping is static |
+
+**Cache instances are per-process.** The MCP server container and the web app container
+each maintain their own independent in-memory cache. A hit in one does not benefit the
+other. For shared cache state across processes, replace `TTLCache` with a Redis backend.
+
+**Observability.** Every cache hit and miss is logged at `INFO` level by the
+`utils.mcp_cache` logger, visible in each container's Docker logs:
+```
+2026-03-22 18:07:55 [INFO] utils.mcp_cache: CACHE MISS | get_market_data(AAPL)
+2026-03-22 18:08:10 [INFO] utils.mcp_cache: CACHE HIT  | get_market_data(AAPL)
+```
+Live cache sizes are available at `GET /cache-stats` on the MCP server.
+
+**Thread safety note:** `TTLCache` is not thread-safe. This is safe for a single-worker
+uvicorn process (all async I/O runs on one event-loop thread). Add a `threading.Lock`
+if you run multiple uvicorn workers.
 
 ## Error Handling
 
@@ -414,6 +481,46 @@ def get_vectorstore():
 3. **Rate Limiting**: Dependent on external API limits
 4. **No PII Storage**: Conversations are session-only (InMemorySaver)
 
+## MCP Server Layer
+
+The MCP server exposes the finance assistant's core tools over HTTP/SSE, allowing Claude
+and other MCP clients to call them directly without going through the Streamlit UI.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MCP Clients                               │
+│   Claude Code CLI  │  Claude Desktop  │  Any MCP-compatible LLM │
+└────────────────────┴──────────────────┴─────────────────────────┘
+                                │
+                    SSE / HTTP (port 8001)
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  mcp_http_server.py (uvicorn)                    │
+│                                                                  │
+│  GET /sse  ──▶  open SSE stream, send session_id                │
+│  POST /messages/?session_id=…  ──▶  JSON-RPC dispatch           │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    call_tool()                            │   │
+│  │                                                          │   │
+│  │   get_market_data  │  get_market_overview                │   │
+│  │   analyze_portfolio│  lookup_expense_ratio               │   │
+│  │   extract_ticker                                         │   │
+│  │            │                                             │   │
+│  │            ▼                                             │   │
+│  │   utils/mcp_cache.py  (TTLCache per tool)                │   │
+│  │            │                                             │   │
+│  │            ▼                                             │   │
+│  │   agents/ + utils/  (live call on cache miss)            │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+A stdio variant (`mcp_server.py`) is also available for local Claude Desktop integration.
+
+---
+
 ## Scalability Considerations
 
 | Component | Current | Scalable Alternative |
@@ -422,3 +529,4 @@ def get_vectorstore():
 | Memory | InMemorySaver | Redis, PostgreSQL |
 | LLM | OpenAI API | Self-hosted, Load balanced |
 | Frontend | Single Streamlit | Multiple instances + LB |
+| MCP cache | `cachetools` TTLCache (in-process) | Redis (shared across replicas) |

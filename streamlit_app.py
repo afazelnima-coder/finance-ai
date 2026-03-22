@@ -4,12 +4,20 @@ from langchain.messages import HumanMessage
 import sys
 import os
 import uuid
+import logging
+
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    level=logging.WARNING,
+)
+logging.getLogger("utils.mcp_cache").setLevel(logging.INFO)
 
 # Add the parent directory to sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from agents import router_agent_v2 as router_agent, news_agent
 from langchain_openai import ChatOpenAI
+import utils.mcp_cache  # activates TTL cache monkey-patching on all tool .func attributes
 
 load_dotenv()
 
@@ -383,6 +391,7 @@ with tab3:
     import plotly.graph_objects as go
     from datetime import datetime, timedelta
 
+    @st.cache_data(ttl=86400)
     def extract_ticker(query: str) -> str | None:
         """Use LLM to extract ticker symbol if a specific company is mentioned."""
         llm = get_guardrail_llm()
