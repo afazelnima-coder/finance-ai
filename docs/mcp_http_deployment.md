@@ -212,10 +212,10 @@ Or add to `~/.claude/claude_desktop_config.json` manually:
 
 ## Caching
 
-All five MCP tools are wrapped with in-memory TTL caches (`cachetools.TTLCache`) defined
-in `utils/mcp_cache.py`. On a cache **hit** the result is returned instantly with no
-external API call. On a **miss** the live function runs and the result is stored for the
-TTL duration.
+All five tools are wrapped with in-memory TTL caches (`cachetools.TTLCache`) defined in
+`utils/mcp_cache.py`. The cache is active in **both** the MCP server and the Streamlit
+web app — the module monkey-patches the LangChain tool `.func` attributes at import time,
+so every `tool.invoke()` call from any LangGraph agent transparently goes through the cache.
 
 | Tool | TTL | Cache key |
 |---|---|---|
@@ -224,6 +224,36 @@ TTL duration.
 | `analyze_portfolio` | 5 min | portfolio description (lowercased + stripped) |
 | `lookup_expense_ratio` | 1 hour | fund identifier (uppercased + stripped) |
 | `extract_ticker` | 24 hours | query (lowercased + stripped) |
+
+### Cache instances are per-process
+
+The MCP server (`cap-proj-mcp-server-1`) and the web app (`cap-proj-web-1`) each run in
+their own Docker container with their own in-memory cache. A hit in one container does
+**not** benefit the other. To share cache state across containers, replace `TTLCache`
+with a Redis backend and add a Redis service to `docker-compose.http.yml`.
+
+### Observing cache activity
+
+Both containers emit `CACHE HIT` / `CACHE MISS` log lines at `INFO` level:
+
+```bash
+# MCP server logs
+docker logs cap-proj-mcp-server-1 --tail 50
+
+# Web app logs
+docker logs cap-proj-web-1 --tail 50
+```
+
+Example output:
+```
+2026-03-22 18:07:55,737 [INFO] utils.mcp_cache: CACHE MISS | get_market_data(AAPL)
+2026-03-22 18:08:10,104 [INFO] utils.mcp_cache: CACHE HIT  | get_market_data(AAPL)
+```
+
+You can also check live cache sizes at any time:
+```bash
+curl http://<ec2-ip>:8001/cache-stats
+```
 
 ### Tuning TTLs
 
@@ -234,9 +264,9 @@ Edit `utils/mcp_cache.py` and change the `ttl=` parameter for the relevant cache
 _market_data_cache: TTLCache = TTLCache(maxsize=128, ttl=30)
 ```
 
-Rebuild the container after any change:
+Rebuild both containers after any change:
 ```bash
-docker-compose -f docker-compose.http.yml up -d --build mcp-server
+docker-compose -f docker-compose.http.yml up -d --build
 ```
 
 ### Cache limits
@@ -251,10 +281,10 @@ _market_data_cache: TTLCache = TTLCache(maxsize=512, ttl=60)
 
 ### Scaling beyond a single process
 
-The TTL cache lives in-process. If you scale the MCP server to multiple uvicorn workers
-or replicas, each process has its own independent cache. To share cache state across
-processes, replace `TTLCache` with a Redis backend (`redis-py` + `setex`/`get`), and add
-a Redis service to `docker-compose.http.yml`.
+The TTL cache lives in-process. If you scale to multiple uvicorn workers or replicas,
+each process has its own independent cache. To share cache state across processes,
+replace `TTLCache` with a Redis backend (`redis-py` + `setex`/`get`), and add a Redis
+service to `docker-compose.http.yml`.
 
 ---
 
@@ -285,3 +315,23 @@ docker-compose -f docker-compose.http.yml logs mcp-server
 docker-compose -f docker-compose.http.yml logs web
 ```
 Most common cause: missing or malformed `.env` file.
+
+**`no space left on device` during `--build`**
+Each rebuild accumulates dangling image layers. Clean up unused Docker resources first:
+```bash
+docker system prune -f          # removes stopped containers, dangling images, build cache
+docker system prune -f --volumes  # also removes unused volumes (more aggressive)
+df -h                           # verify space was freed
+```
+Then retry the build.
+
+**MCP error `-32602` / "Received request before initialization was complete"**
+This is an SSE session race condition — the MCP client sent a request to a session that
+hadn't finished the `initialize` handshake (typically after a server restart). Reconnect
+the client: in Claude Code run `/mcp` or restart Claude Code entirely. The server itself
+is healthy; the error is transient.
+
+**Double log lines for cache hits/misses**
+Ensure `logger.propagate = False` is set inside the `if not logger.handlers:` block in
+`utils/mcp_cache.py`. Without it, records go to both the module's own handler and the
+root logger's handler, producing duplicates.

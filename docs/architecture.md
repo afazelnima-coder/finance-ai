@@ -389,20 +389,23 @@ def get_vectorstore():
     return FAISS.load_local("investopedia_faiss_index", embeddings)
 ```
 
-### MCP Server Cache (`utils/mcp_cache.py`)
+### Shared Cache Layer (`utils/mcp_cache.py`)
 
-All five MCP tools are wrapped with per-tool `TTLCache` instances (from `cachetools`).
-Results are keyed on normalised inputs so identical queries never hit the external API twice
-within the TTL window.
+All five tools are wrapped with per-tool `TTLCache` instances (from `cachetools`). The
+cache is active in **both** the MCP server and the Streamlit web app. At import time,
+`utils/mcp_cache.py` monkey-patches the LangChain tool `.func` attributes, so every
+`tool.invoke()` call — whether from the MCP HTTP handler or from a LangGraph agent inside
+Streamlit — transparently goes through the TTL cache.
 
 ```
-MCP Client request
+Caller (MCP HTTP handler or LangGraph agent)
        │
+       │  tool.invoke("AAPL")  ──or──  cached_get_market_data("AAPL")
        ▼
 ┌──────────────────────────────────────────────┐
-│              call_tool()                      │
+│           utils/mcp_cache.py                  │
 │                                               │
-│  cache key = normalise(arguments)             │
+│  cache key = normalise(input)                 │
 │       │                                       │
 │       ▼                                       │
 │  ┌─────────┐   HIT   ┌──────────────────┐    │
@@ -411,7 +414,7 @@ MCP Client request
 │       │ MISS                                  │
 │       ▼                                       │
 │  ┌─────────────────┐                          │
-│  │  Agent function │  (yfinance / OpenAI /    │
+│  │  Original func  │  (yfinance / OpenAI /    │
 │  │  (live call)    │   Tavily / hardcoded)    │
 │  └────────┬────────┘                          │
 │           │                                   │
@@ -420,7 +423,6 @@ MCP Client request
 │  │  Store in cache │                          │
 │  │  with TTL       │                          │
 │  └────────┬────────┘                          │
-│           │                                   │
 │           ▼                                   │
 │  ┌──────────────────┐                         │
 │  │  Return result   │                         │
@@ -435,6 +437,18 @@ MCP Client request
 | `analyze_portfolio` | `description.strip().lower()` | 300s | 64 | Expensive LLM call; same input → same output |
 | `lookup_expense_ratio` | `fund.upper().strip()` | 3600s | 128 | Expense ratios change quarterly |
 | `extract_ticker` | `query.strip().lower()` | 86400s | 256 | Company→ticker mapping is static |
+
+**Cache instances are per-process.** The MCP server container and the web app container
+each maintain their own independent in-memory cache. A hit in one does not benefit the
+other. For shared cache state across processes, replace `TTLCache` with a Redis backend.
+
+**Observability.** Every cache hit and miss is logged at `INFO` level by the
+`utils.mcp_cache` logger, visible in each container's Docker logs:
+```
+2026-03-22 18:07:55 [INFO] utils.mcp_cache: CACHE MISS | get_market_data(AAPL)
+2026-03-22 18:08:10 [INFO] utils.mcp_cache: CACHE HIT  | get_market_data(AAPL)
+```
+Live cache sizes are available at `GET /cache-stats` on the MCP server.
 
 **Thread safety note:** `TTLCache` is not thread-safe. This is safe for a single-worker
 uvicorn process (all async I/O runs on one event-loop thread). Add a `threading.Lock`
