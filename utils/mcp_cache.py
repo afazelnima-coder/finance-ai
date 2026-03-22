@@ -32,6 +32,11 @@ from agents.portfolio_agent import analyzePortfolio, lookupExpenseRatio
 from utils.ticker_utils import extract_ticker
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    logger.addHandler(_handler)
 
 # ── Per-tool caches ────────────────────────────────────────────────────────
 
