@@ -127,6 +127,23 @@ def guardrail_node(state: State):
         print(f"⚠️ Guardrail check error: {e}, defaulting to on-topic")
         return {"is_on_topic": True}
 
+def check_finance_topic(query: str, conversation_context: str = "") -> bool:
+    """Return True if query is finance-related, False otherwise.
+
+    Delegates to the shared finance_guard so topic classification is consistent
+    across the router, News tab, and Market tab. Defaults to True on error,
+    matching the behaviour of guardrail_node.
+    """
+    try:
+        result = finance_guard.validate(
+            query,
+            metadata={"conversation_context": conversation_context}
+        )
+        return result.validation_passed
+    except Exception:
+        return True
+
+
 def check_topic(state: State) -> Literal["router", "off_topic"]:
     """Conditional edge that checks if topic is on-topic."""
     if state.get("is_on_topic", True):

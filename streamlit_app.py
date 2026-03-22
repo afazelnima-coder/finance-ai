@@ -16,35 +16,17 @@ logging.getLogger("utils.mcp_cache").setLevel(logging.INFO)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from agents import router_agent_v2 as router_agent, news_agent
+from agents.router_agent_v2 import check_finance_topic
 from langchain_openai import ChatOpenAI
 import utils.mcp_cache
 utils.mcp_cache.apply_patches()  # activates TTL cache on LangChain tool objects used by agents
 
 load_dotenv()
 
-# Shared LLM for guardrails (cached)
+# Shared LLM instance used by the inline ticker extractor in the Market tab
 @st.cache_resource
 def get_guardrail_llm():
     return ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-def is_finance_related(query: str) -> bool:
-    """Check if the query is finance-related using LLM."""
-    llm = get_guardrail_llm()
-    prompt = f"""Determine if this question is related to finance, investing, stocks, markets, economics, or financial news.
-
-Finance-related topics include: stocks, bonds, ETFs, mutual funds, indices, market trends,
-company financials, earnings, dividends, trading, investing, portfolio, cryptocurrency,
-forex, commodities, interest rates, inflation, economic indicators, financial planning,
-financial news, market news, economic news, company news.
-
-NOT finance-related: cooking, sports, entertainment, health, travel, general knowledge, etc.
-
-Question: "{query}"
-
-Respond with ONLY "yes" if finance-related, or "no" if not."""
-
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return response.content.strip().lower() == "yes"
 
 # Configure page
 st.set_page_config(
@@ -319,7 +301,7 @@ with tab2:
                 st.markdown(prompt)
 
             # Guardrail check
-            is_valid = is_finance_related(prompt)
+            is_valid = check_finance_topic(prompt)
 
             if not is_valid:
                 with st.chat_message("assistant"):
@@ -556,7 +538,7 @@ Respond with ONLY the ticker symbol or "NONE", nothing else."""
     if submit_button and market_query:
         # Guardrail check
         with st.spinner("Checking question..."):
-            is_valid = is_finance_related(market_query)
+            is_valid = check_finance_topic(market_query)
 
         if not is_valid:
             st.warning("⚠️ **Off-topic question detected**\n\nI can only help with finance-related questions such as stocks, ETFs, market trends, company performance, and investing topics.\n\nPlease ask a finance-related question!")
