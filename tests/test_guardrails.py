@@ -12,56 +12,48 @@ class TestFinanceTopicValidator:
 
     def test_validator_passes_finance_topic(self, mock_openai_llm):
         """Test that finance-related queries pass validation."""
-        with patch("agents.router_agent_v2.ChatOpenAI") as MockLLM:
-            MockLLM.return_value = mock_openai_llm("yes")
-
+        with patch("agents.router_agent_v2.ChatOpenAI"):
             from agents.router_agent_v2 import FinanceTopicValidator
             validator = FinanceTopicValidator()
-            validator.llm = mock_openai_llm("yes")
+        validator.llm = mock_openai_llm("yes")
 
-            result = validator.validate("What is a stock?")
+        result = validator.validate("What is a stock?")
 
-            assert result.outcome == "pass"
+        assert result.outcome == "pass"
 
     def test_validator_fails_non_finance_topic(self, mock_openai_llm):
         """Test that non-finance queries fail validation."""
-        with patch("agents.router_agent_v2.ChatOpenAI") as MockLLM:
-            MockLLM.return_value = mock_openai_llm("no")
-
+        with patch("agents.router_agent_v2.ChatOpenAI"):
             from agents.router_agent_v2 import FinanceTopicValidator
             validator = FinanceTopicValidator()
-            validator.llm = mock_openai_llm("no")
+        validator.llm = mock_openai_llm("no")
 
-            result = validator.validate("Best pizza recipe?")
+        result = validator.validate("Best pizza recipe?")
 
-            assert result.outcome == "fail"
-            assert "not related to finance" in result.error_message
+        assert result.outcome == "fail"
+        assert "not related to finance" in result.error_message
 
     def test_validator_handles_lowercase_yes(self, mock_openai_llm):
-        """Test that validator handles 'Yes' with different cases."""
-        with patch("agents.router_agent_v2.ChatOpenAI") as MockLLM:
-            MockLLM.return_value = mock_openai_llm("YES")
-
+        """Test that validator handles 'YES' (case-insensitive)."""
+        with patch("agents.router_agent_v2.ChatOpenAI"):
             from agents.router_agent_v2 import FinanceTopicValidator
             validator = FinanceTopicValidator()
-            validator.llm = mock_openai_llm("YES")
+        validator.llm = mock_openai_llm("YES")
 
-            result = validator.validate("How do bonds work?")
+        result = validator.validate("How do bonds work?")
 
-            assert result.outcome == "pass"
+        assert result.outcome == "pass"
 
     def test_validator_handles_whitespace(self, mock_openai_llm):
-        """Test that validator handles responses with whitespace."""
-        with patch("agents.router_agent_v2.ChatOpenAI") as MockLLM:
-            MockLLM.return_value = mock_openai_llm("  yes  \n")
-
+        """Test that validator handles responses with surrounding whitespace."""
+        with patch("agents.router_agent_v2.ChatOpenAI"):
             from agents.router_agent_v2 import FinanceTopicValidator
             validator = FinanceTopicValidator()
-            validator.llm = mock_openai_llm("  yes  \n")
+        validator.llm = mock_openai_llm("  yes  \n")
 
-            result = validator.validate("What is inflation?")
+        result = validator.validate("What is inflation?")
 
-            assert result.outcome == "pass"
+        assert result.outcome == "pass"
 
     def test_validator_valid_topics_list(self):
         """Test that validator has expected valid topics configured."""
