@@ -17,7 +17,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from agents import router_agent_v2 as router_agent, news_agent
 from langchain_openai import ChatOpenAI
-import utils.mcp_cache  # activates TTL cache monkey-patching on all tool .func attributes
+import utils.mcp_cache
+utils.mcp_cache.apply_patches()  # activates TTL cache on LangChain tool objects used by agents
 
 load_dotenv()
 

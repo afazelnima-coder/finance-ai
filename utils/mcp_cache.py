@@ -12,14 +12,16 @@ Note: TTLCache is not thread-safe. This is fine for a single-worker uvicorn
 process (all async I/O runs on one thread). If you add multiple uvicorn
 workers, wrap cache access with a threading.Lock.
 
-Monkey-patching:
-  At the bottom of this module the four LangChain @tool objects have their
-  .func attribute replaced with the cached wrappers.  Any caller that goes
-  through tool.invoke() → tool.func() — including LangGraph agents and the
-  Streamlit web app — therefore benefits from the TTL cache transparently.
-  Import this module before the first tool call to activate patching:
+Usage:
+  MCP servers (mcp_server.py, mcp_http_server.py) import and call the
+  cached_* functions directly — no patching needed.
 
-      import utils.mcp_cache  # in streamlit_app.py, mcp_server.py, etc.
+  The Streamlit app runs LangGraph agents whose tool objects were created at
+  import time. To make those agents use the cache, call apply_patches() once
+  at startup before any tool invocations:
+
+      import utils.mcp_cache
+      utils.mcp_cache.apply_patches()
 """
 
 import logging
@@ -130,13 +132,31 @@ def cache_info() -> dict:
     }
 
 
-# ── Monkey-patch tool .func attributes ────────────────────────────────────
-# LangChain StructuredTool calls self.func(*args, **kwargs) on every
-# tool.invoke() / tool.run() call.  Replacing .func with the cached wrapper
-# means every caller — MCP server, LangGraph agents, Streamlit — shares the
-# same TTL cache with zero changes to calling code.
+# ── Optional patch for LangGraph agents ───────────────────────────────────
 
-getMarketData.func      = cached_get_market_data
-getMarketOverview.func  = cached_get_market_overview
-analyzePortfolio.func   = cached_analyze_portfolio
-lookupExpenseRatio.func = cached_lookup_expense_ratio
+_patches_applied = False
+
+
+def apply_patches() -> None:
+    """Patch LangChain tool .func attributes to use TTL-cached wrappers.
+
+    LangChain StructuredTool calls self.func(*args, **kwargs) on every
+    tool.invoke() / tool.run() call. Replacing .func with the cached wrapper
+    makes every LangGraph agent that holds a reference to these tool objects
+    benefit from the TTL cache without any changes to agent code.
+
+    Call this once at application startup (e.g. in streamlit_app.py) before
+    the first tool invocation. MCP servers do not need this — they call the
+    cached_* functions directly.
+
+    Idempotent: safe to call multiple times.
+    """
+    global _patches_applied
+    if _patches_applied:
+        return
+    getMarketData.func      = cached_get_market_data
+    getMarketOverview.func  = cached_get_market_overview
+    analyzePortfolio.func   = cached_analyze_portfolio
+    lookupExpenseRatio.func = cached_lookup_expense_ratio
+    logger.info("Cache patches applied to LangChain tool objects")
+    _patches_applied = True
