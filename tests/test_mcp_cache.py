@@ -33,13 +33,16 @@ from utils.mcp_cache import (
 
 @pytest.fixture(autouse=True)
 def clear_all_caches():
-    """Clear every cache before (and after) each test for isolation."""
+    """Clear every cache before (and after) each test for isolation.
+    Also temporarily re-enables log propagation so caplog can capture records."""
     _market_data_cache.clear()
     _market_overview_cache.clear()
     _portfolio_cache.clear()
     _expense_cache.clear()
     _ticker_cache.clear()
+    mcp_cache.logger.propagate = True  # caplog captures via root logger
     yield
+    mcp_cache.logger.propagate = False
     _market_data_cache.clear()
     _market_overview_cache.clear()
     _portfolio_cache.clear()
